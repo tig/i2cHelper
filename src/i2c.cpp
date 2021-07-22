@@ -22,8 +22,18 @@ i2cDevice declare_devices[] = {
     {false, i2c::ResurrectionRelayAddr, PSTR("Resurrection Relay"), false},
 };
 
+/**
+ * @brief Global instance of the I2C bus.
+ * 
+ */
 i2c Bus = i2c(declare_devices, sizeof(declare_devices) / sizeof(i2cDevice));
 
+/**
+ * @brief Call to initalize the I2C bus. Can (?) be called mulitple times to re-initialize.
+ * 
+ * @return true 
+ * @return false 
+ */
 bool i2c::begin() {
   for (uint8_t i = 0; i < _numDevices; i++) {
     _devices[i].found = false;
@@ -31,6 +41,12 @@ bool i2c::begin() {
   return _i2cMux.begin(MuxAddr);
 }
 
+/**
+ * @brief Given an I2C address, return the device that matches. 
+ * 
+ * @param address - I2C address
+ * @return i2cDevice* 
+ */
 i2cDevice* i2c::find(uint8_t address) {
   for (uint8_t i = 0; i < _numDevices; i++) {
     if (_devices[i].isOnMux == false && _devices[i].address == address) {
@@ -40,6 +56,12 @@ i2cDevice* i2c::find(uint8_t address) {
   return nullptr;
 }
 
+/**
+ * @brief Given a mux port (0-7), return the corresponding device. `isOnMux` will be `true`
+ * 
+ * @param port - Port on the I2c mux.
+ * @return i2cDevice* 
+ */
 i2cDevice* i2c::findDeviceOnMux(uint8_t port) {
   for (uint8_t i = 0; i < _numDevices; i++) {
     if (_devices[i].isOnMux == true && _devices[i].address == port) {
@@ -120,9 +142,9 @@ bool i2c::scanI2C(int delayTime) {
   return success;
 }
 
-// Cycle through all ports to see if they are alive
+// Cycle through just the ports we care about to see if they are alive
 // Valid ports are 0 through 7
-// We are on ports 4 and 5
+// My solution has lidar sensors on ports 4 and 5
 #define START_MUX_LCV 4
 #define STOP_MUX_LCV  5
 
