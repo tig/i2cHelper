@@ -12,20 +12,12 @@
 #define TCP_PORT 80
 
 /**
- * @brief Singleton class representing the exposed API. API is nominally exposed
- * with SHell, but can also be exposed via a keypad or other input in 
+ * @brief Singleton class representing the exposed Commands (API). The API is nominally
+ * exposed with Shell (both Ethernet/Telnet and Serial), but can also be exposed via a keypad or other input in 
  * parallel.
  */
-class Api {
+class Commands {
  public:
-  ShellCommandRegister* cmdStatus = nullptr;
-  ShellCommandRegister* cmdLog = nullptr;
-  ShellCommandRegister* cmdShell = nullptr;
-  ShellCommandRegister* cmdReboot = nullptr;
-  ShellCommandRegister* cmdInit = nullptr;
-  ShellCommandRegister* cmdGet = nullptr;
-  ShellCommandRegister* cmdSet = nullptr;
-
   // Initilaize the REST API
   bool begin();
 
@@ -34,7 +26,8 @@ class Api {
 
   void logCommand(const __FlashStringHelper* name, int argc, const ShellArguments &argv);
 
-  Shell _shell;
+  Shell _serialShell;
+  Shell _telnetShell;
   char shellPrompt [2] = ">";
 
  private:
@@ -55,15 +48,15 @@ class Api {
    * @brief Returns the single instance object
    *
    */
-  static Api& getInstance() {
-    static Api instance;  // Guaranteed to be destroyed.
+  static Commands& getInstance() {
+    static Commands instance;  // Guaranteed to be destroyed.
                           // Instantiated on first use.
     return instance;
   }
 
  private:
   // Prohibiting External Constructions
-  Api();
+  Commands();
 
   // C++ 11
   // =======
@@ -71,7 +64,9 @@ class Api {
   // we don't want.
  public:
   // This breaks printTo
-  //Api(Api const&) = delete;
-  void operator=(Api const&) = delete;
+  //Commands(Commands const&) = delete;
+  void operator=(Commands const&) = delete;
   // =======================================================
 };
+
+extern Commands &Cmds;

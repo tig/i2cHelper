@@ -10,15 +10,15 @@
 #include "i2c.h"
 
 /**
- * @brief base-class for Contact Sensor
+ * @brief base-class for Contact Sensor. Used when simulating real hardware.
  * 
  */
-class ContactSensor {
+class ContactSensor : public Printable {
  public:
   ContactSensor(uint8_t address) : _address(address) {}
   ContactSensor() : ContactSensor(0) {}
 
-  virtual bool begin() = 0;
+  virtual bool begin() { return true; };
 
   virtual bool isContacted() {
     return _contact;
@@ -32,6 +32,16 @@ class ContactSensor {
   void address(uint8_t address) { _address = address; }
   uint8_t getAddress() { return _address; };
 
+  /**
+   * @brief `Printable::printTo` - prints the current motor state (direction & speed)
+   *
+   * @param p
+   * @return size_t
+   */
+  size_t printTo(Print& p) const {
+    return p.print(_contact ? F("closed") : F("opened"));
+  };
+
  protected:
   bool _contact;
 
@@ -39,14 +49,20 @@ class ContactSensor {
   uint8_t _address;
 };
 
+/**
+ * @brief wraps a SparkFun Qwiic Button
+ * 
+ */
 class QwiicContactSensor : public ContactSensor {
  public:
+  using ContactSensor::ContactSensor;
   bool begin() override {
+    Log.noticeln(F("Enabling %S on I2C address %X"), Bus.findDevice(getAddress())->name, getAddress());    
     bool result = _button.begin(getAddress());
     _contact = _button.isPressed();
-    Log.traceln(F("    isContacted = %T, FirmwareVersion = %d, I2Caddress = %X"), _contact, _button.getFirmwareVersion(), _button.getI2Caddress());
+    Log.traceln(F("  isContacted = %T, FirmwareVersion = %d, I2Caddress = %X"), _contact, _button.getFirmwareVersion(), _button.getI2Caddress());
     if (!result) {
-      Log.errorln(F("    ERROR: Sensor setup failed. isConnected = %T, DeviceID() = %X"), _button.isConnected(), _button.deviceID());
+      Log.errorln(F("  ERROR: Sensor setup failed. isConnected = %T, DeviceID() = %X"), _button.isConnected(), _button.deviceID());
     }
     return result;
   };
@@ -64,6 +80,19 @@ class QwiicContactSensor : public ContactSensor {
   QwiicButton _button;
 };
 
+/**
+ * @brief Wraps a parkFun Qwiic VL53L1X distance sensor, providing diagnostics and 
+ * other helpful stuff.
+ * 
+ * See https://learn.sparkfun.com/tutorials/qwiic-distance-sensor-vl53l1x-hookup-guide
+ * SparkFun Library repo: https://github.com/sparkfun/SparkFun_VL53L1X_Arduino_Library
+ *  * 
+ * NOTE: We currently use a forked version of the VL53L1X library 
+ * to get One-Shot Ranging trigger support:
+ * https://github.com/josephduchesne/SparkFun_VL53L1X_Arduino_Library
+ * 
+ * 
+ */
 class DistanceSensor : public Printable {
  public:
   const uint8_t SENSOR_PERIOD = 180;         // How fast to sample - min is 100, but that can result in bad readings some times
@@ -75,6 +104,13 @@ class DistanceSensor : public Printable {
   SFEVL53L1X* _sensor = nullptr;
   uint8_t _muxPort;
 
+  /**
+   * @brief initalize the sensor
+   * 
+   * @param quiet disables logging
+   * @return true if init worked
+   * @return false if init didn't work
+   */
   bool begin(bool quiet = false) {
     bool success = true;
 
@@ -84,11 +120,11 @@ class DistanceSensor : public Printable {
     _sensor = new SFEVL53L1X(Wire);
 
     if (!quiet) {
-      Log.noticeln(F("Enabling %S on mux (%X) port %X)"), Bus.findDeviceOnMux(_muxPort)->name, i2c::i2cDevices::MuxAddr, _muxPort);
-      Log.traceln(F("  Previous mux port: %X"), Bus._i2cMux.getPort());
+      Log.noticeln(F("Enabling %S on mux (%X) port %X)"), Bus.findDeviceOnMux(_muxPort)->name, Bus._muxAddr, _muxPort);
+      Log.traceln(F("  Previous mux port: %X"), Bus._mux.getPort());
     }
 
-    if (!Bus._i2cMux.setPort(_muxPort)) {
+    if (!Bus._mux.setPort(_muxPort)) {
       if (!quiet) {
         Log.errorln(F("    ERROR: i2cMux couldn't set the port."));
       }
@@ -148,7 +184,7 @@ class DistanceSensor : public Printable {
   int _cachedDistance = 0;
 
   int getDistance() {
-    if (!Bus._i2cMux.setPort(_muxPort)) {
+    if (!Bus._mux.setPort(_muxPort)) {
       Log.errorln(F("ERROR: getDistance() - i2cMux couldn't set the port."));
       return 0;
     }
@@ -172,7 +208,7 @@ class DistanceSensor : public Printable {
    * @return size_t
    */
   size_t printTo(Print& p) const {
-    int n = p.print((__FlashStringHelper*)Bus.findDeviceOnMux(_muxPort)->name);
+    int n = p.print(Bus.findDeviceOnMux(_muxPort)->name);
     n += p.print(F(" = "));
     n += p.print(_cachedDistance, DEC);
     return n + p.print(F(" mm"));

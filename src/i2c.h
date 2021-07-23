@@ -5,41 +5,42 @@
 #include <SparkFun_I2C_Mux_Arduino_Library.h>
 #include <Adafruit_BusIO_Register.h>
 
+/**
+ * @brief defines each i2c device. Create an array of these and
+ * pass to `begin()`.
+ * 
+ */
 struct i2cDevice {
   bool isOnMux;
+  bool isMux;
   uint8_t address;
-  const char* name;
+  const __FlashStringHelper* name;
   bool found;
 };
 
 class i2c {
  public:
-  enum i2cDevices
-  {
-    MuxAddr = 0x70,
-    OpenedSensorAddr = 0x6F,
-    ClosedSensorAddr = 0x6E,
-    ActuatorRelay1Addr = 0x18,
-    ActuatorRelay2Addr = 0x19,
-    MotorControllerAddr = 0x58,
-    ForwardDistanceSensorAddr = 0x04,
-    RearwardDistanceSensorAddr = 0x05,
-    ForwardEndRangeSensorAddr = 0x6D,
-    RearwardEndRangeSensorAddr = 0x6C,
-    ResurrectionRelayAddr = 0x1A
-  };
-
-  i2c(i2cDevice* devs, uint8_t num) : _devices(devs), _numDevices(num) {};
+  i2c() : _devices(nullptr), _numDevices(0) {};
 
   i2cDevice* _devices;
   int8_t _numDevices;
 
   // I2C Mux from SparkFun
-  QWIICMUX _i2cMux;
+  // TODO: The way this is written, only one mux device is supported
+  QWIICMUX _mux;
+  uint8_t _muxAddr;
 
-  bool begin();
+  /**
+   * @brief sets up the bus 
+   * 
+   * @param devices array of device specs
+   * @param num number of elements in devices
+   * @return true 
+   * @return false 
+   */
+  bool begin(i2cDevice* devices, size_t num);
 
-  i2cDevice* find(uint8_t address);
+  i2cDevice* findDevice(uint8_t address);
   i2cDevice* findDeviceOnMux(uint8_t port);
 
   // testing the i2c mux to see if we can figure out why Forward port is failing

@@ -8,25 +8,11 @@
 
 static const char errorStr[] PROGMEM = "n/a";
 
-i2cDevice declare_devices[] = {
-    {false, i2c::MuxAddr, PSTR("Mux"), false},
-    {false, i2c::OpenedSensorAddr, PSTR("Opened Sensor"), false},
-    {false, i2c::ClosedSensorAddr, PSTR("Closed Sensor"), false},
-    {false, i2c::ActuatorRelay1Addr, PSTR("Actuator Relay1"), false},
-    {false, i2c::ActuatorRelay2Addr, PSTR("Actuator Relay2"), false},
-    {false, i2c::MotorControllerAddr, PSTR("Motor Controller"), false},
-    {true, i2c::ForwardDistanceSensorAddr, PSTR("Forward Distance Sensor"), false},
-    {true, i2c::RearwardDistanceSensorAddr, PSTR("Rearward Distance Sensor"), false},
-    {false, i2c::ForwardEndRangeSensorAddr, PSTR("Forward End-range Sensor"), false},
-    {false, i2c::RearwardEndRangeSensorAddr, PSTR("Rearward End-range Sensor"), false},
-    {false, i2c::ResurrectionRelayAddr, PSTR("Resurrection Relay"), false},
-};
-
 /**
  * @brief Global instance of the I2C bus.
  * 
  */
-i2c Bus = i2c(declare_devices, sizeof(declare_devices) / sizeof(i2cDevice));
+i2c Bus = i2c();
 
 /**
  * @brief Call to initalize the I2C bus. Can (?) be called mulitple times to re-initialize.
@@ -34,11 +20,15 @@ i2c Bus = i2c(declare_devices, sizeof(declare_devices) / sizeof(i2cDevice));
  * @return true 
  * @return false 
  */
-bool i2c::begin() {
+bool i2c::begin(i2cDevice* devices, size_t num) {
+  
   for (uint8_t i = 0; i < _numDevices; i++) {
     _devices[i].found = false;
+    if (_devices[i].isMux) {
+      _muxAddr = devices[i].address;
+    }
   }
-  return _i2cMux.begin(MuxAddr);
+  return _mux.begin(_muxAddr);
 }
 
 /**
@@ -47,7 +37,7 @@ bool i2c::begin() {
  * @param address - I2C address
  * @return i2cDevice* 
  */
-i2cDevice* i2c::find(uint8_t address) {
+i2cDevice* i2c::findDevice(uint8_t address) {
   for (uint8_t i = 0; i < _numDevices; i++) {
     if (_devices[i].isOnMux == false && _devices[i].address == address) {
       return &_devices[i];
@@ -89,7 +79,7 @@ bool i2c::scanI2C(int delayTime) {
   }
 
   // Disable all ports on the mux (port # out of range)
-  _i2cMux.setPort(8);
+  _mux.setPort(8);
 
   Log.notice(F("I2C devices found: "));
   for (address = 1; address < 127; address++) {
@@ -101,14 +91,14 @@ bool i2c::scanI2C(int delayTime) {
     error = Wire.endTransmission();
 
     if (error == 0) {
-      auto dev = find(address);
+      auto dev = findDevice(address);
       if (dev != nullptr) {
         dev->found = true;
       }
-      Log.notice(F("%S (%X), "), (dev != nullptr) ? dev->name : errorStr, address);
+      Log.notice(F("%S (%X), "), (dev != nullptr) ? (const char*)dev->name : errorStr, address);
 
       // Is this the Mux?
-      if (dev->found == true && dev->address == MuxAddr) {
+      if (dev->found == true && dev->address == _muxAddr) {
         for (uint8_t i = 0; i < _numDevices; i++) {
           if (_devices[i].isOnMux) {
             DistanceSensor sensor = DistanceSensor(_devices[i].address);
@@ -158,24 +148,24 @@ bool i2c::scanI2C(int delayTime) {
 bool i2c::testI2CMux(int delayTime) {
   byte error, address;  // variable for error and I2C address
   bool success = true;
-  byte currentPort = _i2cMux.getPort();
+  byte currentPort = _mux.getPort();
 
   Log.noticeln(F("Testing I2C Mux..."));
-  _i2cMux.setPort(0);  // Connect master to port labeled '1' on the mux
+  _mux.setPort(0);  // Connect master to port labeled '1' on the mux
   Log.traceln(F("  Port: %d, State: %B, isConnected: %T"),
-      _i2cMux.getPort(), _i2cMux.getPortState(), _i2cMux.isConnected());
+      _mux.getPort(), _mux.getPortState(), _mux.isConnected());
 
   for (int lcv = START_MUX_LCV; lcv <= STOP_MUX_LCV; lcv++) {
     auto dev = findDeviceOnMux(lcv);
-    Log.noticeln(F("  Checking mux port: %S (%X)"), (dev != nullptr) ? dev->name : errorStr, lcv);
+    Log.noticeln(F("  Checking mux port: %S (%X)"), (dev != nullptr) ? (const char*)dev->name : errorStr, lcv);
 
     // first set the port
-    if (_i2cMux.setPort(lcv)) {
+    if (_mux.setPort(lcv)) {
       Log.traceln(F("    Port: %d, State: %B, isConnected: %T"),
-          _i2cMux.getPort(), _i2cMux.getPortState(), _i2cMux.isConnected());
+          _mux.getPort(), _mux.getPortState(), _mux.isConnected());
     } else {
       Log.errorln(F("    ERROR: setPort FAILED - Port: %d, State: %B, isConnected: %T"),
-          _i2cMux.getPort(), _i2cMux.getPortState(), _i2cMux.isConnected());
+          _mux.getPort(), _mux.getPortState(), _mux.isConnected());
       if (dev->isOnMux) {
         success = false;
       }
@@ -192,8 +182,8 @@ bool i2c::testI2CMux(int delayTime) {
       error = Wire.endTransmission();
 
       if (error == 0) {
-        auto dev = find(address);
-        Log.notice(F("%S (%X), "), (dev != nullptr) ? dev->name : errorStr, address);
+        auto dev = findDevice(address);
+        Log.notice(F("%S (%X), "), (dev != nullptr) ? (const char*)dev->name : errorStr, address);
       } else if (error == 4) {
         // Errors:
         //  0 : Success
@@ -208,6 +198,6 @@ bool i2c::testI2CMux(int delayTime) {
     Log.noticeln(F(""));
   }
 
-  _i2cMux.setPort(currentPort);
+  _mux.setPort(currentPort);
   return success;
 }

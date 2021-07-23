@@ -1,0 +1,36 @@
+{
+  "name": "i2cTester",
+  "version": "0.1.0",
+  "description": "Tests (scans) the i2c (and Sparkfun Qwiic) bus and connected devices on Arduino.",
+  "keywords": "i2c, sparkfun, qwiic, mux, bus, devices, kindel",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tig/i2cTester.git"
+  },
+  "authors": [
+    {
+      "name": "Charlie Kindel",
+      "email": "tig@kindel.com",
+      "url": "https://www.kindel.com",
+      "maintainer": true
+    }
+  ],
+  "build": {
+    "srcDir": "src"
+  },
+  "examples": [
+    {
+      "name": "Main",
+      "base": "examples",
+      "files": [
+        "main.cpp",
+        "main.h"
+      ]
+  }
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/tig/i2cTester",
+  "dependencies": {},
+  "frameworks": "*",
+  "platforms": "*"
+}
