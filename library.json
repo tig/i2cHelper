@@ -1,7 +1,7 @@
 {
-  "name": "i2cTester",
+  "name": "i2cHelper",
   "version": "0.1.0",
-  "description": "Tests (scans) the i2c (and Sparkfun Qwiic) bus and connected devices on Arduino.",
+  "description": "Arduino classes for simplifying using i2c (and Sparkfun Qwiic) bus devices. Provides a robust i2c tester/scanner.",
   "keywords": "i2c, sparkfun, qwiic, mux, bus, devices, kindel",
   "repository": {
     "type": "git",
@@ -29,7 +29,7 @@
   }
   ],
   "license": "MIT",
-  "homepage": "https://github.com/tig/i2cTester",
+  "homepage": "https://github.com/tig/i2cHelper",
   "dependencies": {},
   "frameworks": "*",
   "platforms": "*"

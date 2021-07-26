@@ -2,85 +2,108 @@
 #include <Arduino.h>
 #include <ArduinoLog.h>
 
-#ifdef ARDUINO_SAMD_MKRZERO
+#ifndef SIMULATION
 #include <SparkFun_I2C_Mux_Arduino_Library.h>
 #include <SparkFun_Qwiic_Relay.h>
 #endif
 
 #include "i2c.h"
 
-class Relay : public Qwiic_Relay, public Printable {
+class Relay : public i2cDevice {
  public:
-  Relay(uint8_t address) : Qwiic_Relay(address), _address(address), _cachedOn(0){};
+  using i2cDevice::i2cDevice;
 
-  bool begin() {
-    bool success = true;
-    Log.noticeln(F("Enabling %S on I2C address %X"), Bus.findDevice(_address)->name, _address);
-#ifdef ARDUINO_SAMD_MKRZERO
-    if (Qwiic_Relay::begin()) {
-      turnRelayOff();
-      getState();
-      Log.noticeln(F("%S = %p"), Bus.findDevice(_address)->name, this);
-    } else {
-        Log.errorln(F("  ERRROR: Relay setup failed"));
-        success = false;
-    }
-#else
-    pinMode(_address, OUTPUT);
-#endif
-    return success;
-  };
-
-  void turnRelayOn() {
-    _cachedOn = 1;
-#ifdef ARDUINO_SAMD_MKRZERO
-    Qwiic_Relay::turnRelayOn();
-#else
-    digitalWrite(_address, _cachedOn);
+  virtual void turnRelayOn() {
+    _state = 1;
+#ifndef SIMULATION
+    digitalWrite(address(), _state);
 #endif
   };
 
-  void turnRelayOff() {
-    _cachedOn = 0;
-#ifdef ARDUINO_SAMD_MKRZERO
-    Qwiic_Relay::turnRelayOff();
-#else
-    digitalWrite(_address, _cachedOn);
+  virtual void turnRelayOff() {
+    _state = 0;
+#ifndef SIMULATION
+    digitalWrite(address(), _state);
 #endif
   };
 
-  void toggleRelay() {
-    _cachedOn = _cachedOn ? 0 : 1;
-#ifdef ARDUINO_SAMD_MKRZERO
-    Qwiic_Relay::toggleRelay();
-#else
-    digitalWrite(_address, _cachedOn);
+  virtual void toggleRelay() {
+    _state = _state ? 0 : 1;
+#ifndef SIMULATION
+    digitalWrite(address(), _state);
 #endif
   };
 
-  uint8_t getState() {
-#ifdef ARDUINO_SAMD_MKRZERO
-    _cachedOn = Qwiic_Relay::getState();
-#else
-#endif
-    return _cachedOn;
+  virtual void setState(uint8_t state) {
+    _state = state;
   };
 
-  void probe() {
-      getState();
+  virtual uint8_t state() {
+    return _state;
+  };
+
+  virtual void probe() {
+    state();
   }
 
-  /**
-   * @brief `Printable::printTo` - prints the current motor state (direction & speed)
-   *
-   * @param p
-   * @return size_t
-   */
-  size_t printTo(Print& p) const {
-    return p.print(_cachedOn ? F("on") : F("off"));
+  virtual size_t printTo(Print& p) const override {
+    int n = i2cDevice::printTo(p);
+    return n += p.print(_state ? F("on") : F("off"));
   };
 
  private:
-  uint8_t _address;
-  uint8_t _cachedOn;
+  uint8_t _state;
+};
+
+class QwiicRelay : public Relay {
+ public:
+  using Relay::Relay;
+
+  virtual bool begin() override {
+    // Call base which sets up mux if needed
+    bool success = i2cDevice::begin();
+    if (success) {
+      if (_relay != nullptr) {
+        delete _relay;
+      }
+      _relay = new Qwiic_Relay(address());
+      success = _relay->begin();
+      if (!success) {
+        Log.errorln(F("  ERROR: %S setup failed"), name());
+      }
+      turnRelayOff();
+      setState(_relay->getState());
+
+      Log.noticeln(F("%p"), this);
+    }
+    return success;
+  };
+
+  virtual void turnRelayOn() override {
+    Relay::turnRelayOn();
+    _relay->turnRelayOn();
+  };
+
+  virtual void turnRelayOff() override {
+    Relay::turnRelayOff();
+    _relay->turnRelayOff();
+  };
+
+  virtual void toggleRelay() override {
+    Relay::toggleRelay();
+    _relay->toggleRelay();
+  };
+
+  virtual uint8_t state() override {
+    uint8_t result = _relay->getState();
+    Relay::setState(result);
+    return Relay::state();
+  };
+
+  virtual void probe() override {
+    state();
+  }
+
+ private:
+  Qwiic_Relay* _relay = nullptr;
 };

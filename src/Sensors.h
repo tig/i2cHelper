@@ -13,71 +13,88 @@
  * @brief base-class for Contact Sensor. Used when simulating real hardware.
  * 
  */
-class ContactSensor : public Printable {
+class ContactSensor : public i2cDevice {
  public:
-  ContactSensor(uint8_t address) : _address(address) {}
-  ContactSensor() : ContactSensor(0) {}
-
-  virtual bool begin() { return true; };
+  using i2cDevice::i2cDevice;
 
   virtual bool isContacted() {
+    setPort();
     return _contact;
   };
 
   // for testing only
   virtual void setContact(bool contact) {
+    setPort();
     _contact = contact;
   };
 
-  void address(uint8_t address) { _address = address; }
-  uint8_t getAddress() { return _address; };
-
-  /**
-   * @brief `Printable::printTo` - prints the current motor state (direction & speed)
-   *
-   * @param p
-   * @return size_t
-   */
-  size_t printTo(Print& p) const {
-    return p.print(_contact ? F("closed") : F("opened"));
+  virtual size_t printTo(Print& p) const override {
+    int n = i2cDevice::printTo(p);
+    return n += p.print(_contact ? F("closed") : F("opened"));
   };
 
  protected:
   bool _contact;
-
- private:
-  uint8_t _address;
 };
 
 /**
- * @brief wraps a SparkFun Qwiic Button
+ * @brief Wraps a SparkFun Qwiic Button
  * 
  */
 class QwiicContactSensor : public ContactSensor {
  public:
   using ContactSensor::ContactSensor;
-  bool begin() override {
-    Log.noticeln(F("Enabling %S on I2C address %X"), Bus.findDevice(getAddress())->name, getAddress());    
-    bool result = _button.begin(getAddress());
-    _contact = _button.isPressed();
-    Log.traceln(F("  isContacted = %T, FirmwareVersion = %d, I2Caddress = %X"), _contact, _button.getFirmwareVersion(), _button.getI2Caddress());
-    if (!result) {
-      Log.errorln(F("  ERROR: Sensor setup failed. isConnected = %T, DeviceID() = %X"), _button.isConnected(), _button.deviceID());
+
+  virtual bool begin() override {
+    // Call base which sets up mux if needed
+    bool success = i2cDevice::begin();
+    if (success) {
+      success = _button.begin(address());
+
+      _contact = _button.isPressed();
+      Log.traceln(F("  isContacted = %T, FirmwareVersion = %d, I2Caddress = %X"), _contact, _button.getFirmwareVersion(), _button.getI2Caddress());
+      if (!success) {
+        Log.errorln(F("  ERROR: %S setup failed. isConnected = %T, DeviceID() = %X"), name(), _button.isConnected(), _button.deviceID());
+      }
+      Log.noticeln(F("%p"), this);
     }
-    return result;
+    return success;
   };
 
   virtual bool isContacted() override {
+    ContactSensor::isContacted();
     return _contact = _button.isPressed();
   };
 
   void setContact(bool contact) override {
     ContactSensor::setContact(contact);
-    digitalWrite(getAddress(), isContacted());
+    digitalWrite(address(), contact);
   };
 
  private:
   QwiicButton _button;
+};
+
+class DistanceSensor : public i2cDevice {
+ public:
+  using i2cDevice::i2cDevice;
+
+  virtual uint16_t distance() {
+    return _cachedDistance;
+  }
+
+  // for simulation
+  virtual void setDistance(uint16_t distance) {
+    _cachedDistance = distance;
+  }
+
+  virtual size_t printTo(Print& p) const override {
+    int n = i2cDevice::printTo(p);
+    return n += p.print(_cachedDistance, DEC);
+  };
+
+ private:
+  uint16_t _cachedDistance = 0;
 };
 
 /**
@@ -93,124 +110,86 @@ class QwiicContactSensor : public ContactSensor {
  * 
  * 
  */
-class DistanceSensor : public Printable {
+class VL53L1XDistanceSensor : public DistanceSensor {
  public:
   const uint8_t SENSOR_PERIOD = 180;         // How fast to sample - min is 100, but that can result in bad readings some times
   const uint8_t SENSOR_TIMING_BUDGET = 100;  // Predefined values = 15, 20, 33, 50, 100(default), 200, 500.
-  const uint16_t SENSOR_WAIT_PERIOD = 5000;  // Num msec to wait until giving up on checkforDataReady
+  const uint16_t SENSOR_WAIT_PERIOD = 1000;  // Num msec to wait until giving up on checkforDataReady
 
-  DistanceSensor(uint8_t muxPort) : _muxPort(muxPort){};
+  using DistanceSensor::DistanceSensor;
 
-  SFEVL53L1X* _sensor = nullptr;
-  uint8_t _muxPort;
-
-  /**
-   * @brief initalize the sensor
-   * 
-   * @param quiet disables logging
-   * @return true if init worked
-   * @return false if init didn't work
-   */
-  bool begin(bool quiet = false) {
-    bool success = true;
-
-    if (_sensor != nullptr) {
-      delete _sensor;
-    }
-    _sensor = new SFEVL53L1X(Wire);
-
-    if (!quiet) {
-      Log.noticeln(F("Enabling %S on mux (%X) port %X)"), Bus.findDeviceOnMux(_muxPort)->name, Bus._muxAddr, _muxPort);
-      Log.traceln(F("  Previous mux port: %X"), Bus._mux.getPort());
-    }
-
-    if (!Bus._mux.setPort(_muxPort)) {
-      if (!quiet) {
-        Log.errorln(F("    ERROR: i2cMux couldn't set the port."));
+  virtual bool begin() override {
+    // Call base which sets up mux if needed
+    bool success = i2cDevice::begin();
+    if (success) {
+      if (_sensor != nullptr) {
+        delete _sensor;
       }
-      success = false;
-    }
+      _sensor = new SFEVL53L1X(Wire);
 
-    uint16_t result;
-    if ((result = (uint16_t)_sensor->begin()) != 0)  // Begin returns 0 on a good init
-    {
-      if (quiet) {
-        return false;
-      }
-
-      for (uint16_t msecs = 0; !_sensor->checkForDataReady() && msecs <= 500; msecs++) {
-        delay(1);
-        if (msecs == SENSOR_WAIT_PERIOD) {
-          Log.errorln(F("    ERROR: Sensor failed to make data ready."));
-          success = false;
-          break;
+      uint16_t result;
+      if ((result = (uint16_t)_sensor->begin()) != 0)  // Begin returns 0 on a good init
+      {
+        for (uint16_t msecs = 0; !_sensor->checkForDataReady() && msecs <= SENSOR_WAIT_PERIOD; msecs++) {
+          delay(1);
+          if (msecs == SENSOR_WAIT_PERIOD) {
+            Log.errorln(F("    ERROR: Sensor failed to make data ready."));
+            success = false;
+            break;
+          }
         }
+        Log.errorln(F("    ERROR: Sensor failed to begin. Result: %d. Please check wiring."), result);
+        Log.traceln(F("          checkID: %d"), (uint16_t)_sensor->checkID());
+        VL53L1X_Version_t ver = _sensor->getSoftwareVersion();
+        Log.traceln(F("  softwareVersion: %d.%d.%d.%d"), ver.major, ver.minor, ver.revision, ver.build);
+        Log.traceln(F("       I2CAddress: %X"), (uint16_t)_sensor->getI2CAddress());
+        Log.traceln(F("      getSensorID: %X"), (uint16_t)_sensor->getSensorID());
+
+        success = false;
+      } else {
+        Log.traceln(F("       I2CAddress: %X"), (uint16_t)_sensor->getI2CAddress());
+        _sensor->setIntermeasurementPeriod(SENSOR_PERIOD);
+        _sensor->setDistanceModeLong();
+        _sensor->setTimingBudgetInMs(SENSOR_TIMING_BUDGET);
+
+        // Set the initial distance
+        _sensor->startOneshotRanging();
+        for (uint16_t msecs = 0; !_sensor->checkForDataReady() && msecs <= SENSOR_WAIT_PERIOD; msecs++) {
+          delay(1);
+          if (msecs == SENSOR_WAIT_PERIOD) {
+            Log.errorln(F("    ERROR: Sensor failed to make data ready."));
+            success = false;
+            break;
+          }
+        }
+        setDistance(_sensor->getDistance());
+        Log.noticeln(F("%p"), this);
       }
-      Log.errorln(F("    ERROR: Sensor failed to begin. Result: %d. Please check wiring."), result);
-      Log.traceln(F("          checkID: %d"), (uint16_t)_sensor->checkID());
-      // VL53L1X_Version_t ver;
-      // _sensor->_device->VL53L1X_GetSWVersion(&ver);
-      VL53L1X_Version_t ver = _sensor->getSoftwareVersion();
-      Log.traceln(F("  softwareVersion: %d.%d.%d.%d"), ver.major, ver.minor, ver.revision, ver.build);
-      Log.traceln(F("       I2CAddress: %X"), (uint16_t)_sensor->getI2CAddress());
-      Log.traceln(F("      getSensorID: %X"), (uint16_t)_sensor->getSensorID());
-
-      success = false;
     } else {
-      _sensor->setIntermeasurementPeriod(SENSOR_PERIOD);
-      _sensor->setDistanceModeLong();
-      _sensor->setTimingBudgetInMs(SENSOR_TIMING_BUDGET);
+      Log.errorln(F("    ERROR: i2cDevice::begin() failed"));
+    }
+    return success;
+  };
 
-      // Set the initial distance
+  virtual uint16_t distance() override {
+    if (setPort()) {
       _sensor->startOneshotRanging();
       for (uint16_t msecs = 0; !_sensor->checkForDataReady() && msecs <= SENSOR_WAIT_PERIOD; msecs++) {
         delay(1);
         if (msecs == SENSOR_WAIT_PERIOD) {
-          if (!quiet) {
-            Log.errorln(F("    ERROR: Sensor failed to make data ready."));
-          }
-          success = false;
+          Log.errorln(F("ERROR: getDistance() - Sensor failed to make data ready."));
+          return 0;
           break;
         }
       }
-      _cachedDistance = _sensor->getDistance();
-      if (!quiet) {
-        Log.noticeln(F("%p"), this);
-      }
+      setDistance(_sensor->getDistance());
+      return distance();
     }
-    return success;
+    return 0;
   }
 
-  int _cachedDistance = 0;
+  SFEVL53L1X* sensor() const { return _sensor; }
 
-  int getDistance() {
-    if (!Bus._mux.setPort(_muxPort)) {
-      Log.errorln(F("ERROR: getDistance() - i2cMux couldn't set the port."));
-      return 0;
-    }
-    _sensor->startOneshotRanging();
-    for (uint16_t msecs = 0; !_sensor->checkForDataReady() && msecs <= SENSOR_WAIT_PERIOD; msecs++) {
-      delay(1);
-      if (msecs == SENSOR_WAIT_PERIOD) {
-        Log.errorln(F("ERROR: getDistance() - Sensor failed to make data ready."));
-        return 0;
-        break;
-      }
-    }
-    return _cachedDistance = _sensor->getDistance();
-  }
-
-  /**
-   * @brief `Printable::printTo` - prints the current State & Trigger
-   * 'State(Trigger)'
-   *
-   * @param p
-   * @return size_t
-   */
-  size_t printTo(Print& p) const {
-    int n = p.print(Bus.findDeviceOnMux(_muxPort)->name);
-    n += p.print(F(" = "));
-    n += p.print(_cachedDistance, DEC);
-    return n + p.print(F(" mm"));
-  };
+ private:
+  SFEVL53L1X* _sensor = nullptr;
 };
