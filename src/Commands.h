@@ -37,9 +37,9 @@ class Commands : public Printable {
 
   void logCommand(const __FlashStringHelper* name, int argc, const ShellArguments& argv);
 
-  bool execute(const __FlashStringHelper* cmd) {
-    return _serialShell.execute(cmd);
-  }
+  // bool execute(const __FlashStringHelper* cmd) {
+  //   return _serialShell.execute(cmd);
+  // }
 
 
   Shell _serialShell;

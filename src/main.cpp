@@ -108,6 +108,13 @@ i2cDevice* my_devices[] = {
     _rearwardEndRangeSensor,
     _resurrectionRelay};
 
+unsigned long DELAY_TIME = 1000;
+unsigned long _timer =0;
+/**
+ * @brief Number of seconds (DELAY_TIME) to log state in the loop
+ */
+int _logStateInLoopFor = 0;
+
 /**
  * @brief Commands for the shell/serial command processor.
  * 
@@ -162,6 +169,7 @@ ShellCommandRegister* cmdInit = ShellCommandClass(init, "Inits - [all|mux|fwd|rw
       } else {
         Log.noticeln(F("The I2C bus initialzied"));
         success = true;
+        _logStateInLoopFor = 1;
       }
     }
   }
@@ -305,25 +313,19 @@ ShellCommandRegister* cmdMotor = ShellCommandClass(motor, "Controls the motor - 
     return;
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("fwd"))) {
     _motorController->forward();
-    for (int i = 0; i < 20; i++) {
-      delay(250);
-      _motorController->probe();
-      Cmds._telnetShell.println(*_motorController);
-    }
+    _logStateInLoopFor = 20;
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("rev"))) {
     _motorController->reverse();
-    for (int i = 0; i < 20; i++) {
-      delay(250);
-      _motorController->probe();
-      Cmds._telnetShell.println(*_motorController);
-    }
+    _logStateInLoopFor = 20;
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("stop"))) {
     _motorController->setSpeed(0);
+    _logStateInLoopFor = 20;
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("off"))) {
     _motorController->emergencyStop();
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("speed"))) {
     if (argc > 2) {
       _motorController->setSpeed(strtol(argv[2], nullptr, 10));
+    _logStateInLoopFor = 20;
     } else {
       _motorController->probe();
       Cmds._telnetShell.println(_motorController->speed(), DEC);
@@ -475,8 +477,6 @@ ShellCommandRegister* cmdi2c = ShellCommandClass(test, "runs i2c tests and tools
   }
 });
 
-unsigned long DELAY_TIME = 1000;
-unsigned long _timer = millis();
 
 /**
  * @brief good 'ole Arudinio setup()
@@ -502,13 +502,15 @@ void setup(void) {
   _timer = millis();
 }
 
+
 void loop() {
   // listen for and process REST commands from Ethernet
   // and button presses from keypad
   Cmds.handle();
 
-  if (0 && Bus.initialized() && (millis() - _timer) >= DELAY_TIME) {
-    _timer += DELAY_TIME;
+  if (_logStateInLoopFor > 0 && Bus.initialized() && (millis() - _timer) >= DELAY_TIME) {
+    _timer = millis();
+    _logStateInLoopFor--;
 
     _motorController->probe();
     Log.noticeln(F("%p"), *_motorController);

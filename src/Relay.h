@@ -103,7 +103,7 @@ class QwiicRelay : public Relay {
 
   virtual uint8_t state() override {
     uint8_t result = _relay->getState();
-    Log.traceln(F("QwiicRelay::state() relay says %d"), result);
+    //Log.traceln(F("QwiicRelay::state() relay says %d"), result);
     Relay::setState(result);
     return result;
   };
