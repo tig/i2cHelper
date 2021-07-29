@@ -90,7 +90,7 @@ void Commands::handle() {
     if (_shellClient) {
       Log.noticeln(F("Client %p is attempting to connect to port %d."), _shellClient.remoteIP(), _shellClient.localPort());
       _haveClient = true;
-      if (_telnetShell.begin(_shellClient, 5, Terminal::Mode::Serial)) {
+      if (_telnetShell.begin(_shellClient, 20, Terminal::Mode::Serial)) {
         Log.noticeln(F("Client %p connected to port %d."), _shellClient.remoteIP(), _shellClient.localPort());
 
       } else {

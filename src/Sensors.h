@@ -52,12 +52,12 @@ class QwiicContactSensor : public ContactSensor {
       success = _button.begin(address());
 
       _contact = _button.isPressed();
-      Log.traceln(F("  isContacted = %T, FirmwareVersion = %d, I2Caddress = %X"), _contact, _button.getFirmwareVersion(), _button.getI2Caddress());
+      //Log.trace(F("  isContacted = %T, FirmwareVersion = %d, I2Caddress = %X"), _contact, _button.getFirmwareVersion(), _button.getI2Caddress());
       if (!success) {
         Log.errorln(F("  ERROR: %S setup failed. isConnected = %T, DeviceID() = %X"), name(), _button.isConnected(), _button.deviceID());
       }
-      Log.noticeln(F("%p"), this);
-    }
+      Log.trace(F(" [%p]"), this);
+    } 
     return success;
   };
 
@@ -75,6 +75,11 @@ class QwiicContactSensor : public ContactSensor {
   QwiicButton _button;
 };
 
+
+/**
+ * @brief Base class for distance sensors
+ * 
+ */
 class DistanceSensor : public i2cDevice {
  public:
   using i2cDevice::i2cDevice;
@@ -147,7 +152,7 @@ class VL53L1XDistanceSensor : public DistanceSensor {
 
         success = false;
       } else {
-        Log.traceln(F("       I2CAddress: %X"), (uint16_t)_sensor->getI2CAddress());
+        //Log.traceln(F("       I2CAddress: %X"), (uint16_t)_sensor->getI2CAddress());
         _sensor->setIntermeasurementPeriod(SENSOR_PERIOD);
         _sensor->setDistanceModeLong();
         _sensor->setTimingBudgetInMs(SENSOR_TIMING_BUDGET);
@@ -163,10 +168,10 @@ class VL53L1XDistanceSensor : public DistanceSensor {
           }
         }
         setDistance(_sensor->getDistance());
-        Log.noticeln(F("%p"), this);
+      Log.trace(F(" [%p]"), this);
       }
     } else {
-      Log.errorln(F("    ERROR: i2cDevice::begin() failed"));
+      Log.errorln(F("    ERROR: VL53L1XDistanceSensor::begin() failed"));
     }
     return success;
   };
@@ -182,8 +187,8 @@ class VL53L1XDistanceSensor : public DistanceSensor {
           break;
         }
       }
-      setDistance(_sensor->getDistance());
-      return distance();
+      DistanceSensor::setDistance(_sensor->getDistance());
+      return DistanceSensor::distance();
     }
     return 0;
   }

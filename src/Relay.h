@@ -35,6 +35,7 @@ class Relay : public i2cDevice {
   };
 
   virtual void setState(uint8_t state) {
+    //Log.traceln(F("Relay::state() setting to %d"), state);
     _state = state;
   };
 
@@ -48,6 +49,9 @@ class Relay : public i2cDevice {
 
   virtual size_t printTo(Print& p) const override {
     int n = i2cDevice::printTo(p);
+    if (_state == 0xFF) {
+      return n += p.print(F("err"));
+    }
     return n += p.print(_state ? F("on") : F("off"));
   };
 
@@ -74,30 +78,34 @@ class QwiicRelay : public Relay {
       turnRelayOff();
       setState(_relay->getState());
 
-      Log.noticeln(F("%p"), this);
+      Log.trace(F(" [%p]"), this);
     }
     return success;
   };
 
   virtual void turnRelayOn() override {
-    Relay::turnRelayOn();
+    //Relay::turnRelayOn();
     _relay->turnRelayOn();
+    //state();
   };
 
   virtual void turnRelayOff() override {
-    Relay::turnRelayOff();
+    //Relay::turnRelayOff();
     _relay->turnRelayOff();
+    //state();
   };
 
   virtual void toggleRelay() override {
-    Relay::toggleRelay();
+    //Relay::toggleRelay();
     _relay->toggleRelay();
+    state();
   };
 
   virtual uint8_t state() override {
     uint8_t result = _relay->getState();
+    Log.traceln(F("QwiicRelay::state() relay says %d"), result);
     Relay::setState(result);
-    return Relay::state();
+    return result;
   };
 
   virtual void probe() override {

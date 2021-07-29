@@ -27,7 +27,7 @@
  * 
  * This class leverages the ArduinoShell library. 
  */
-class Commands {
+class Commands : public Printable {
  public:
   // Initilaize the REST API
   bool begin(bool raw = false);
@@ -36,6 +36,11 @@ class Commands {
   void handle();
 
   void logCommand(const __FlashStringHelper* name, int argc, const ShellArguments& argv);
+
+  bool execute(const __FlashStringHelper* cmd) {
+    return _serialShell.execute(cmd);
+  }
+
 
   Shell _serialShell;
   Shell _telnetShell;
@@ -52,6 +57,17 @@ class Commands {
       _telnetShell.setPrompt(shellPrompt);
     }
   }
+
+  
+  /**
+   * @brief `Printable::printTo` -    *
+   * @param p
+   * @return size_t
+   */
+  size_t printTo(Print &p) const override {
+    int n = p.print(F("IP Address = "));
+    return n += p.print(Ethernet.localIP());
+  };
 
  private:
   // Networking

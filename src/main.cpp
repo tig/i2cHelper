@@ -54,8 +54,8 @@ enum myi2cAddresses
   MotorControllerAddr = 0x58,
   ForwardDistanceSensorAddr = 0x29,   // VL53L1X hard wired i2c address 0x52 bit shifted
   RearwardDistanceSensorAddr = 0x29,  // VL53L1X hard wired i2c address 0x52 bit shifted
-  ForwardEndRangeSensorAddr = 0x6D,
-  RearwardEndRangeSensorAddr = 0x6C,
+  ForwardEndRangeSensorAddr = 0x6C,   // reprogrammed
+  RearwardEndRangeSensorAddr = 0x6C,  // jumpers soldered
   ResurrectionRelayAddr = 0x1A
 };
 
@@ -84,11 +84,11 @@ QwiicContactSensor* _openedSensor = new QwiicContactSensor(myi2cAddresses::Opene
 QwiicContactSensor* _closedSensor = new QwiicContactSensor(myi2cAddresses::ClosedSensorAddr, 0xFF, (__FlashStringHelper*)PSTR("Closed Sensor"), nullptr);
 QwiicRelay* _actuatorRelay1 = new QwiicRelay(myi2cAddresses::ActuatorRelay1Addr, 0xFF, (__FlashStringHelper*)PSTR("Actuator Relay1"), nullptr);
 QwiicRelay* _actuatorRelay2 = new QwiicRelay(myi2cAddresses::ActuatorRelay2Addr, 0xFF, (__FlashStringHelper*)PSTR("Actuator Relay2"), nullptr);
-Motor* _motorController = new Motor(myi2cAddresses::MotorControllerAddr, 0xFF, (__FlashStringHelper*)PSTR("Motor Controller"), nullptr);
-VL53L1XDistanceSensor* _forwardDistanceSensor = new VL53L1XDistanceSensor(myi2cAddresses::ForwardDistanceSensorAddr, 0x04, (__FlashStringHelper*)PSTR("Forward Distance Sensor"), new QWIICMUX());
-VL53L1XDistanceSensor* _rearwardDistanceSensor = new VL53L1XDistanceSensor(myi2cAddresses::RearwardDistanceSensorAddr, 0x05, (__FlashStringHelper*)PSTR("Rearward Distance Sensor"), new QWIICMUX());
-QwiicContactSensor* _forwardEndRangeSensor = new QwiicContactSensor(myi2cAddresses::ForwardEndRangeSensorAddr, 0x04, (__FlashStringHelper*)PSTR("Forward End-range Sensor"), new QWIICMUX());
-QwiicContactSensor* _rearwardEndRangeSensor = new QwiicContactSensor(myi2cAddresses::RearwardEndRangeSensorAddr, 0x05, (__FlashStringHelper*)PSTR("Rearward End-range Sensor"), new QWIICMUX());
+AdafruitMotorController* _motorController = new AdafruitMotorController(myi2cAddresses::MotorControllerAddr, 0xFF, (__FlashStringHelper*)PSTR("Motor Controller"), nullptr);
+VL53L1XDistanceSensor* _forwardDistanceSensor = new VL53L1XDistanceSensor(myi2cAddresses::ForwardDistanceSensorAddr, 0x04, (__FlashStringHelper*)PSTR("Forward Distance Sensor"), _mux->mux());
+VL53L1XDistanceSensor* _rearwardDistanceSensor = new VL53L1XDistanceSensor(myi2cAddresses::RearwardDistanceSensorAddr, 0x05, (__FlashStringHelper*)PSTR("Rearward Distance Sensor"), _mux->mux());
+QwiicContactSensor* _forwardEndRangeSensor = new QwiicContactSensor(myi2cAddresses::ForwardEndRangeSensorAddr, 0x04, (__FlashStringHelper*)PSTR("Forward End-range Sensor"), _mux->mux());
+QwiicContactSensor* _rearwardEndRangeSensor = new QwiicContactSensor(myi2cAddresses::RearwardEndRangeSensorAddr, 0x05, (__FlashStringHelper*)PSTR("Rearward End-range Sensor"), _mux->mux());
 QwiicRelay* _resurrectionRelay = new QwiicRelay(myi2cAddresses::ResurrectionRelayAddr, 0xFF, (__FlashStringHelper*)PSTR("Resurrection Relay"), nullptr);
 
 /**
@@ -113,9 +113,8 @@ i2cDevice* my_devices[] = {
  * 
  */
 ShellCommandRegister* cmdLog = ShellCommandClass(log, "Sets logging - [serial*|shell]|[verbose*|info|silent]", {
-  Commands::getInstance().logCommand(command->name, argc, argv);
+  Cmds.logCommand(command->name, argc, argv);
 
-  Log.noticeln(F("changing shell"));
   int level = Log.getLevel();
   if (argc > 2 && !strcmp_P(argv[2], PSTR("verbose"))) {
     level = LOG_LEVEL_VERBOSE;
@@ -127,35 +126,47 @@ ShellCommandRegister* cmdLog = ShellCommandClass(log, "Sets logging - [serial*|s
   Log.setLevel(level);
 
   if (argc > 1 && !strcmp_P(argv[1], PSTR("serial"))) {
+    Log.noticeln(F("Changing shell to %S"), argv[1]);
     Log.begin(level, &Serial, false);
     Log.noticeln(F("serial"));
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("shell"))) {
+    Log.noticeln(F("Changing shell to %S"), argv[1]);
     Log.begin(level, &shell, false);
     Log.noticeln(F("shell"));
   }
 });
 
 ShellCommandRegister* cmdShell = ShellCommandClass(shell, "Configures shell - [telnet*|raw]", {
-  Commands::getInstance().logCommand(command->name, argc, argv);
+  Cmds.logCommand(command->name, argc, argv);
   if (argc > 1 && !strcmp_P(argv[1], PSTR("raw"))) {
-    Commands::getInstance().setRaw(true);
+    Cmds.setRaw(true);
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("telnet"))) {
-    Commands::getInstance().setRaw(false);
+    Cmds.setRaw(false);
   }
 });
 
-ShellCommandRegister* cmdInit = ShellCommandClass(init, "Inits and tests - [all|i2c|mux|fwd|rwd|motor|opened|closed|fwdend|rwdend|relay1|relay2|resurrect]", {
-  Commands::getInstance().logCommand(command->name, argc, argv);
+ShellCommandRegister* cmdInit = ShellCommandClass(init, "Inits - [all|mux|fwd|rwd|motor|opened|closed|fwdend|rwdend|relay1|relay2|resurrect] [<n>]", {
+  Cmds.logCommand(command->name, argc, argv);
 
   bool success = true;
-  if (argc > 1 && !strcmp_P(argv[1], PSTR("all"))) {
-    success = begin();
+  int iterations = 1;
+  if (argc > 2) {
+    iterations = strtol(argv[2], nullptr, 10);
   }
-  if (argc > 1 && !strcmp_P(argv[1], PSTR("i2c"))) {
-    success = Bus.scanI2C(30);
+  if (argc > 1 && !strcmp_P(argv[1], PSTR("all"))) {
+    for (int i = 0; i < iterations; i++) {
+      Log.noticeln(F("------------- Initializing all devices"));
+      if (!Bus.begin(my_devices, sizeof(my_devices) / sizeof(i2cDevice*))) {
+        success = false;
+        Log.errorln(F("ERROR: Bus.begin() failed"));
+      } else {
+        Log.noticeln(F("The I2C bus initialzied"));
+        success = true;
+      }
+    }
   }
   if (argc > 1 && !strcmp_P(argv[1], PSTR("mux"))) {
-    success = Bus.testI2CMux(30);
+    success = _mux->begin();
   }
   if (argc > 1 && !strcmp_P(argv[1], PSTR("fwd"))) {
     success = _forwardDistanceSensor->begin();
@@ -187,63 +198,76 @@ ShellCommandRegister* cmdInit = ShellCommandClass(init, "Inits and tests - [all|
   if (argc > 1 && !strcmp_P(argv[1], PSTR("resurrect"))) {
     success = _resurrectionRelay->begin();
   }
-  shell.println(success, DEC);
+  Cmds._telnetShell.print(command->name);
+  Cmds._telnetShell.print(F(" = "));
+  Cmds._telnetShell.println(success, DEC);
 });
 
-ShellCommandRegister* cmdGet = ShellCommandClass(get, "Gets state - [all|motor|fwd|rwd|opened|closed|fwdend|rwdend|relay1|relay2|resurrect]", {
-  Commands::getInstance().logCommand(command->name, argc, argv);
+ShellCommandRegister* cmdGet = ShellCommandClass(get, "Gets state - [all|i2c|ip|motor|fwd|rwd|opened|closed|fwdend|rwdend|relay1|relay2|resurrect]", {
+  Cmds.logCommand(command->name, argc, argv);
 
   bool all = (argc > 1 && !strcmp_P(argv[1], PSTR("all")));
 
+  if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("ip")))) {
+    Log.noticeln(F("%p"), &Cmds);
+    Cmds._telnetShell.println(Cmds);
+  }
+  if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("i2c")))) {
+    Log.noticeln(F("------------- Verifying All Devices are Working "));
+    Bus.probeAll(10);
+  }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("motor")))) {
     _motorController->probe();
     Log.noticeln(F("%p"), *_motorController);
-    Commands::getInstance()._telnetShell.println(*_motorController);
+    Cmds._telnetShell.println(*_motorController);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("fwd")))) {
     _forwardDistanceSensor->distance();
     Log.noticeln(F("%p"), *_forwardDistanceSensor);
-    Commands::getInstance()._telnetShell.println(*_forwardDistanceSensor);
+    Cmds._telnetShell.println(*_forwardDistanceSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("rwd")))) {
     _rearwardDistanceSensor->distance();
     Log.noticeln(F("%p"), *_rearwardDistanceSensor);
-    Commands::getInstance()._telnetShell.println(*_rearwardDistanceSensor);
+    Cmds._telnetShell.println(*_rearwardDistanceSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("fwdend")))) {
     _forwardEndRangeSensor->isContacted();
     Log.noticeln(F("%p"), *_forwardEndRangeSensor);
-    Commands::getInstance()._telnetShell.println(*_forwardEndRangeSensor);
+    Cmds._telnetShell.println(*_forwardEndRangeSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("rwdend")))) {
     _rearwardEndRangeSensor->isContacted();
     Log.noticeln(F("%p"), *_rearwardEndRangeSensor);
-    Commands::getInstance()._telnetShell.println(*_rearwardEndRangeSensor);
+    Cmds._telnetShell.println(*_rearwardEndRangeSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("opened")))) {
     Log.noticeln(F("%p"), *_openedSensor);
-    Commands::getInstance()._telnetShell.println(*_openedSensor);
+    Cmds._telnetShell.println(*_openedSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("closed")))) {
     Log.noticeln(F("%p"), *_closedSensor);
-    Commands::getInstance()._telnetShell.println(*_closedSensor);
+    Cmds._telnetShell.println(*_closedSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("relay1")))) {
+    _actuatorRelay1->state();
     Log.noticeln(F("%p"), *_actuatorRelay1);
-    Commands::getInstance()._telnetShell.println(*_actuatorRelay1);
+    Cmds._telnetShell.println(*_actuatorRelay1);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("relay2")))) {
+    _actuatorRelay2->state();
     Log.noticeln(F("%p"), *_actuatorRelay2);
-    Commands::getInstance()._telnetShell.println(*_actuatorRelay2);
+    Cmds._telnetShell.println(*_actuatorRelay2);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("resurrect")))) {
+    _resurrectionRelay->state();
     Log.noticeln(F("%p"), *_resurrectionRelay);
-    Commands::getInstance()._telnetShell.println(*_resurrectionRelay);
+    Cmds._telnetShell.println(*_resurrectionRelay);
   }
 });
 
 ShellCommandRegister* cmdRelay = ShellCommandClass(relay, "Controls a relay - [1|2|res] ([on|off|toggle])", {
-  Commands::getInstance().logCommand(command->name, argc, argv);
+  Cmds.logCommand(command->name, argc, argv);
   Relay* relay = nullptr;
 
   if (argc > 1 && !strcmp_P(argv[1], PSTR("1"))) {
@@ -269,17 +293,30 @@ ShellCommandRegister* cmdRelay = ShellCommandClass(relay, "Controls a relay - [1
   }
   if (relay != nullptr) {
     relay->probe();
-    Commands::getInstance()._telnetShell.println(*relay);
+    Cmds._telnetShell.println(*relay);
   }
 });
 
-ShellCommandRegister* cmdMotor = ShellCommandClass(motor, "Controls the motor - [speed (0-255)|accel (0-255)|fwd|rev|stop|off]", {
-  Commands::getInstance().logCommand(command->name, argc, argv);
+ShellCommandRegister* cmdMotor = ShellCommandClass(motor, "Controls the motor - [init|speed (0-255)|accel (0-255)|fwd|rev|stop|off]", {
+  Cmds.logCommand(command->name, argc, argv);
 
-  if (argc > 1 && !strcmp_P(argv[1], PSTR("fwd"))) {
+  if (argc > 1 && !strcmp_P(argv[1], PSTR("init"))) {
+    _motorController->begin();
+    return;
+  } else if (argc > 1 && !strcmp_P(argv[1], PSTR("fwd"))) {
     _motorController->forward();
+    for (int i = 0; i < 20; i++) {
+      delay(250);
+      _motorController->probe();
+      Cmds._telnetShell.println(*_motorController);
+    }
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("rev"))) {
     _motorController->reverse();
+    for (int i = 0; i < 20; i++) {
+      delay(250);
+      _motorController->probe();
+      Cmds._telnetShell.println(*_motorController);
+    }
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("stop"))) {
     _motorController->setSpeed(0);
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("off"))) {
@@ -289,7 +326,7 @@ ShellCommandRegister* cmdMotor = ShellCommandClass(motor, "Controls the motor - 
       _motorController->setSpeed(strtol(argv[2], nullptr, 10));
     } else {
       _motorController->probe();
-      Commands::getInstance()._telnetShell.println(_motorController->speed(), DEC);
+      Cmds._telnetShell.println(_motorController->speed(), DEC);
       return;
     }
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("accel"))) {
@@ -297,173 +334,149 @@ ShellCommandRegister* cmdMotor = ShellCommandClass(motor, "Controls the motor - 
       _motorController->setAcceleration(strtol(argv[2], nullptr, 10));
     } else {
       _motorController->probe();
-      Commands::getInstance()._telnetShell.println(_motorController->directionString());
+      Cmds._telnetShell.println(_motorController->directionString());
       return;
     }
+  } else {
+    Cmds._serialShell.help();
+    Cmds._telnetShell.help();
   }
   _motorController->probe();
-  Commands::getInstance()._telnetShell.println(*_motorController);
+  Cmds._telnetShell.println(*_motorController);
 });
 
 ShellCommandRegister* cmdLA = ShellCommandClass(la, "Controls linear actuator via relays 1 & 2 - ([extend|retract|off])", {
-  Commands::getInstance().logCommand(command->name, argc, argv);
+  Cmds.logCommand(command->name, argc, argv);
 
   if (argc > 1 && !strcmp_P(argv[1], PSTR("extend"))) {
-    _actuatorRelay1->turnRelayOn();
-    _actuatorRelay2->turnRelayOff();
+    delay(500);
+    _actuatorRelay1->turnRelayOff();
+    delay(500);
+    _actuatorRelay2->turnRelayOn();
   }
   if (argc > 1 && !strcmp_P(argv[1], PSTR("retract"))) {
-    _actuatorRelay2->turnRelayOn();
-    _actuatorRelay1->turnRelayOff();
+    delay(500);
+    _actuatorRelay2->turnRelayOff();
+    delay(500);
+    _actuatorRelay1->turnRelayOn();
   }
   if (argc > 1 && !strcmp_P(argv[1], PSTR("off"))) {
+    delay(500);
     _actuatorRelay1->turnRelayOff();
+    delay(500);
     _actuatorRelay2->turnRelayOff();
   }
-  Commands::getInstance()._telnetShell.print(*_actuatorRelay1);
-  Commands::getInstance()._telnetShell.print(F(", "));
-  shell.println(*_actuatorRelay2);
+  _actuatorRelay1->probe();
+  Cmds._telnetShell.print(*_actuatorRelay1);
+  Cmds._telnetShell.print(F(", "));
+  _actuatorRelay2->probe();
+  Cmds._telnetShell.println(*_actuatorRelay2);
+  //shell.println(*_actuatorRelay2);
 });
 
-/**
- * @brief Inits all bus related stuff; called from `setup()` and the `init` command.
- * 
- */
-bool begin() {
+void test() {
   bool success = true;
 
-  Log.noticeln(F("------------- I2C Bus Setup"));
+  Wire.begin();
+  Log.noticeln(F("Wire initialzied"));
 
-  Log.noticeln(F("------------- Qwiic Mux"));
-  if (!_mux->begin()) {
-    success = false;
-  }
+  QWIICMUX mux;
 
-  Log.noticeln(F("------------- I2C Bus "));
-  if (!Bus.begin(my_devices, sizeof(my_devices) / sizeof(i2cDevice*))) {
-    success = false;
-    Log.errorln(F("ERROR: Bus.begin failed"));
+  mux.begin();
+
+  QwiicButton button1, button2;
+
+  button1.begin(0x6D);  // port 0x04
+  button2.begin(0x6C);  // port 0x05
+
+  //mux.setPort(0x04);
+  Log.traceln(F("button1 (%X:%X) = %d"), button1.getI2Caddress(), mux.getPort(), button1.isPressed());
+
+  //mux.setPort(0x05);
+  Log.traceln(F("button2 (%X:%X) = %d"), button2.getI2Caddress(), mux.getPort(), button2.isPressed());
+}
+
+uint8_t fromHex(const char* s) {
+  char* p;
+  long n = strtoul(s, &p, 16);
+  if (p == nullptr || *p != 0) {
+    // not a number
+    return 0;
   } else {
-    Log.noticeln(F("The I2C bus initialzied"));
+    return n;
+  }
+}
+
+ShellCommandRegister* cmdi2c = ShellCommandClass(test, "runs i2c tests and tools [test|scan|progbtn <old> <new>]", {
+  Cmds.logCommand(command->name, argc, argv);
+
+  if (argc > 1 && !strcmp_P(argv[1], PSTR("test"))) {
+    test();
   }
 
-  // scan the bus and report all devices found
-  // Log.noticeln(F("------------- I2C Bus Scan "));
-  // if (!Bus.scanI2C(10)) {
-  //   success = false;
-  // }
-
-  // scan the mux and report all devices found
-  //Log.noticeln(F("------------- Mux test "));
-  //Bus.testI2CMux(10);
-
-  Log.noticeln(F("------------- Forward Distance Sensor "));
-
-  Log.traceln(F("Hard coded i2cDevice::begin - %S - (%X:%X) isMux = %T, mux &%X - deviceAddress = %X"),
-      _forwardDistanceSensor->name(), _forwardDistanceSensor->address(), _forwardDistanceSensor->muxPort(), _forwardDistanceSensor->isMux(), _forwardDistanceSensor->mux(), _forwardDistanceSensor->mux()->getAddress());
-  assert(_forwardDistanceSensor->mux());
-
-  if (_mux->mux()->setPort(_forwardDistanceSensor->muxPort())) {
-    Log.traceln(F("setPort worked"));
-  } else {
-    Log.traceln(F("setPort failed"));
+  if (argc > 1 && !strcmp_P(argv[1], PSTR("scan"))) {
+    Log.noticeln(F("------------- Scanning I2C bus for ALL devices "));
+    Bus.scan(10);
   }
 
-  Log.traceln("\nProbe: ");
-  if (!Bus.probeDevice(_forwardDistanceSensor->address(), _forwardDistanceSensor->muxPort(), (const char*)_forwardDistanceSensor->name(), 100)) {
-    Log.traceln(F("ERROR probe failed"));
-  }
-  Log.traceln("  - done probing\n");
-
-  QWIICMUX* _testmux = new QWIICMUX();
-  Log.traceln(F("Manual QWIICMUX setup - %S - (%X:%X) isMux = %T, mux &%X - deviceAddress = %X"),
-      _forwardDistanceSensor->name(), _forwardDistanceSensor->address(), _forwardDistanceSensor->muxPort(),
-      _forwardDistanceSensor->isMux(), _testmux, _testmux->getAddress());
-  bool b = _testmux->begin(0x70);
-  if (b) {
-    Log.traceln(F(" begin OK - %S - (%X:%X) isMux = %T, mux &%X - deviceAddress = %X"),
-        _forwardDistanceSensor->name(), _forwardDistanceSensor->address(), _forwardDistanceSensor->muxPort(),
-        _forwardDistanceSensor->isMux(), _testmux, _testmux->getAddress());
-
-    if (!_testmux->setPort(_forwardDistanceSensor->muxPort())) {
-      Log.errorln(F("    ERROR: QWIICMUX couldn't set the port."));
-      return false;
-    } else {
-      Log.errorln(F("    YAY: QWIICMUX set the port."));
-      Log.traceln("\nProbe: ");
-      if (!Bus.probeDevice(_forwardDistanceSensor->address(), _forwardDistanceSensor->muxPort(), (const char*)_forwardDistanceSensor->name(), 100)) {
-        Log.traceln(F("ERROR probe failed"));
-      }
-      Log.traceln("  - done probing\n");
+  if (argc > 1 && !strcmp_P(argv[1], PSTR("progbtn"))) {
+    uint8_t addr = 0;
+    uint8_t newAddr = 0;
+    if (argc > 2) {
+      addr = fromHex(argv[2]);
+    }
+    if (argc > 3) {
+      newAddr = fromHex(argv[3]);
     }
 
-  } else {
-    Log.traceln(F(" begin FAILED - %S - (%X:%X) isMux = %T, mux &%X - deviceAddress = %X"),
-        _forwardDistanceSensor->name(), _forwardDistanceSensor->address(), _forwardDistanceSensor->muxPort(),
-        _forwardDistanceSensor->isMux(), _testmux, _testmux->getAddress());
-  }
+    Log.noticeln(F("progbtn: addr = %X, newAddr = %X"), addr, newAddr);
 
-  // //delay(1000);
-  // if (_mux->mux()->setPort(_forwardDistanceSensor->muxPort())) {
-  //   Log.errorln(F("    ERROR: QWIICMUX couldn't set the port."));
-  //   return false;
-  // }
+    if (addr != 0 && newAddr != 0 && addr != newAddr && ((newAddr > 0x08 && newAddr < 0x77))) {
+      Log.noticeln(F("Changing device %X's address to %X"), addr, newAddr);
 
-  Log.traceln("\nProbe: ");
-  if (!Bus.probeDevice(_forwardDistanceSensor->address(), _forwardDistanceSensor->muxPort(), (const char*)_forwardDistanceSensor->name(), 100)) {
-    Log.traceln(F("ERROR probe failed"));
-  }
-  Log.traceln("  - done probing\n");
+      Wire.begin();
+      Log.noticeln(F("Wire initialzied"));
 
-  if (!_forwardDistanceSensor->begin()) {
-    success = false;
-  }
-  Log.noticeln(F("------------- Rearward Distance Sensor "));
-  if (!_rearwardDistanceSensor->begin()) {
-    success = false;
-  }
+      QwiicButton btn;
+      if (btn.begin(addr)) {
+        if (btn.getI2Caddress() != addr) {
+          Log.errorln(F("ERROR: address retreived from %X does not match (%X)"), addr, btn.getI2Caddress());
+          return;
+        }
+        if (btn.isConnected()) {
+          Log.noticeln(F("  Found %X. Setting address to %X"), btn.getI2Caddress(), newAddr);
 
-  Log.noticeln(F("------------- Forward End-Range Contact Sensor "));
-  if (!_forwardEndRangeSensor->begin()) {
-    success = false;
-  }
-  Log.noticeln(F("------------- Rearward End-Range Contact Sensor "));
-  if (!_rearwardEndRangeSensor->begin()) {
-    success = false;
-  }
+          if (!btn.setI2Caddress(newAddr)) {
+            Log.errorln(F("ERROR: setI2Caddress(%X) failed"), newAddr);
+            return;
+          }
 
-  Log.noticeln(F("------------- Door Opened Contact Sensor "));
-  if (!_openedSensor->begin()) {
-    success = false;
-  }
-  Log.noticeln(F("------------- Door Closed Contact Sensor "));
-  if (!_closedSensor->begin()) {
-    success = false;
-  }
+          delay(100);  //give the hardware time to do whatever configuration it needs to do
 
-  Log.noticeln(F("------------- Linear Actuator Relay 1 "));
-  if (!_actuatorRelay1->begin()) {
-    success = false;
-  }
-  Log.noticeln(F("------------- Linear Actuator Relay 2 "));
-  if (!_actuatorRelay2->begin()) {
-    success = false;
-  }
+          if (btn.isConnected()) {
+            Log.noticeln(F("  %X isconnected()"), btn.getI2Caddress());
+          } else {
+            Log.errorln(F("ERROR: after isConnected() failed"));
+            return;
+          }
 
-  Log.noticeln(F("------------- Resurrection Relay"));
-  if (!_resurrectionRelay->begin()) {
-    success = false;
+          if (btn.begin(newAddr)) {
+            Log.noticeln(F("  Begin worked for %X. New address is %X"), btn.getI2Caddress(), newAddr);
+          }
+        } else {
+          Log.errorln(F("ERROR: isConnected failed"));
+        }
+      } else {
+        Log.errorln(F("ERROR: begin(%X) failed"), addr);
+      }
+    } else {
+      Log.errorln(F("ERROR: invalid addreses"));
+    }
   }
+});
 
-  // setup the motor
-  Log.noticeln(F("------------- Motor Controller "));
-  if (!_motorController->begin()) {
-    success = false;
-  }
-
-  Log.noticeln(F("------------- Initialization finished. Ready for commands."));
-  return success;
-}
+unsigned long DELAY_TIME = 1000;
+unsigned long _timer = millis();
 
 /**
  * @brief good 'ole Arudinio setup()
@@ -478,26 +491,63 @@ void setup(void) {
     Log.errorln(F("ERROR: Commands failed to initalize"));
   }
 
-#if defined(ARDUINO_ARCH_ESP32)
-  if (!Wire.begin()) {
-    Log.errorln(F("ERROR: Wire.begin failed"));
-  } else {
-    Log.noticeln(F("Wire initialzied"));
-  }
-#else
-  Wire.begin();
-  Log.noticeln(F("Wire initialzied"));
+#if 0
+  Cmds._serialShell.help();
 #endif
 
-  //begin();
+  if (Bus.initialized() == false) {
+    Log.errorln("NOTE: Bus and devices are not initialzied. Use `init all` command.");
+  }
 
-  //Cmds._serialShell.help();
+  _timer = millis();
 }
 
 void loop() {
   // listen for and process REST commands from Ethernet
   // and button presses from keypad
   Cmds.handle();
+
+  if (0 && Bus.initialized() && (millis() - _timer) >= DELAY_TIME) {
+    _timer += DELAY_TIME;
+
+    _motorController->probe();
+    Log.noticeln(F("%p"), *_motorController);
+    Cmds._telnetShell.println(*_motorController);
+
+    _forwardDistanceSensor->distance();
+    Log.noticeln(F("%p"), *_forwardDistanceSensor);
+    Cmds._telnetShell.println(*_forwardDistanceSensor);
+
+    _rearwardDistanceSensor->distance();
+    Log.noticeln(F("%p"), *_rearwardDistanceSensor);
+    Cmds._telnetShell.println(*_rearwardDistanceSensor);
+
+    _forwardEndRangeSensor->isContacted();
+    Log.noticeln(F("%p"), *_forwardEndRangeSensor);
+    Cmds._telnetShell.println(*_forwardEndRangeSensor);
+
+    _rearwardEndRangeSensor->isContacted();
+    Log.noticeln(F("%p"), *_rearwardEndRangeSensor);
+    Cmds._telnetShell.println(*_rearwardEndRangeSensor);
+
+    Log.noticeln(F("%p"), *_openedSensor);
+    Cmds._telnetShell.println(*_openedSensor);
+
+    Log.noticeln(F("%p"), *_closedSensor);
+    Cmds._telnetShell.println(*_closedSensor);
+
+    _actuatorRelay1->state();
+    Log.noticeln(F("%p"), *_actuatorRelay1);
+    Cmds._telnetShell.println(*_actuatorRelay1);
+
+    _actuatorRelay2->state();
+    Log.noticeln(F("%p"), *_actuatorRelay2);
+    Cmds._telnetShell.println(*_actuatorRelay2);
+
+    _resurrectionRelay->state();
+    Log.noticeln(F("%p"), *_resurrectionRelay);
+    Cmds._telnetShell.println(*_resurrectionRelay);
+  }
 }
 
 // Debug & Logging helpers

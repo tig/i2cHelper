@@ -22,69 +22,72 @@ i2c Bus = i2c::getInstance();
  */
 bool i2c::begin(i2cDevice** devices, size_t num) {
   bool success = true;
+  _initialized = false;
   _devices = devices;
   _numDevices = num;
 
+#if defined(ARDUINO_ARCH_ESP32)
+  if (!Wire.begin()) {
+    Log.errorln(F("ERROR: Wire.begin failed"));
+  } else {
+    Log.noticeln(F("Wire initialzied"));
+  }
+#else
+  Wire.begin();
+  Log.noticeln(F("Wire initialzied"));
+#endif
+
   Log.traceln(F("Looking for these %d devices"), _numDevices);
   for (uint8_t i = 0; i < _numDevices; i++) {
-    Log.trace(F("Address %X - %S"), _devices[i]->address(), _devices[i]->name());
+    Log.trace(F("Address %X - %S --"), _devices[i]->address(), _devices[i]->name());
     _devices[i]->setFound(false);
     if (_devices[i]->isMux()) {
-      if (_devices[i]->mux()->begin(_devices[i]->address())) {
-        Log.traceln(F(" -- is a mux and has initialized"));
-      } else {
-        Log.errorln(F("\n  ERROR: Mux at %X failed initialized"), _devices[i]->address());
-        success = false;
-      }
-    } else if (_devices[i]->muxPort() != 0xFF) {
-      Log.traceln(F(" -- mux'd device on mux port %X"), _devices[i]->muxPort());
+      Log.trace(F(" is a mux"));
+    }
+    if (_devices[i]->muxPort() != 0xFF) {
+      Log.trace(F(" on mux %X:%X"), _devices[i]->muxPort(), _devices[i]->mux()->getAddress());
+    }
+
+    if (_devices[i]->begin()) {
+      Log.traceln(F(""));//Log.traceln(F(" -- initialized"));
     } else {
-      Log.traceln(F(""));
+      Log.errorln(F("\n  ERROR: Device at %X failed to init"), _devices[i]->address());
+      success = false;
     }
   }
-  return success;
+  return _initialized = success;
 }
 
 /**
- * @brief Given an I2C address, return the device that matches. 
+ * @brief Given an I2C address, return the i2cDevice that matches from the array of devices
  * 
  * @param address - I2C address
  * @return i2cDevice* 
  */
 i2cDevice* i2c::findDevice(uint8_t address, uint8_t port) {
+  if (!initialized()) return nullptr;
   for (uint8_t i = 0; i < _numDevices; i++) {
-    if (_devices[i]->address() == address && _devices[i]->address() == port) {
+    if (_devices[i]->address() == address && _devices[i]->muxPort() == port) {
       return _devices[i];
     }
   }
   return nullptr;
 }
 
-// /**
-//  * @brief Given a mux port (0-7), return the corresponding device. `isOnMux` will be `true`
-//  *
-//  * @param port - Port on the I2c mux.
-//  * @return i2cDevice*
-//  */
-// i2cDevice* i2c::findDeviceOnMux(uint8_t port) {
-//   for (uint8_t i = 0; i < _numDevices; i++) {
-//     if (_devices[i]->isOnMux == true && _devices[i]->address == port) {
-//       return &_devices[i];
-//     }
-//   }
-//   return nullptr;
-// }
-
 /**
  * @brief scan the i2c bus for all devices. Uses the declare_devices array of
- * i2cDevice structs to pretty print results. Deep scans into the mux and uses
- * knowledge of DistanceSensors to detect they are there.
+ * i2cDevice structs to pretty print results. 
  * 
  * @param delayTime 
  * @return true 
  * @return false 
  */
-bool i2c::scanI2C(int delayTime) {
+bool i2c::probeAll(int delayTime) {
+  if (!initialized()) {
+    Log.errorln(F("ERROR: i2c::scanI2C when not initialized."));
+    return false;
+  }
+
   bool success = true;
 
   // Only scan for muxes that we know are there to save time
@@ -92,16 +95,16 @@ bool i2c::scanI2C(int delayTime) {
     _devices[i]->setFound(false);
   }
 
-  Log.notice(F("I2C devices found: "));
+  // Log.notice(F("I2C devices found: "));
   for (uint8_t i = 0; i < _numDevices; i++) {
     if (!_devices[i]->isMux() && _devices[i]->mux() != nullptr) {
       //Log.trace(F("!isMux - setting port %S"), _devices[i]->name());
-      if (!_devices[i]->mux()->setPort(_devices[i]->muxPort())) {
+      if (!_devices[i]->setPort()) {
         Log.errorln(F("  ERROR: Mux at %X failed setPort"), _devices[i]->address());
       }
     }
 
-    bool found = probeDevice(_devices[i]->address(), _devices[i]->muxPort(), (const char*)_devices[i]->name(), delayTime);
+    bool found = probeDevice(_devices[i]->address(), _devices[i]->muxPort(), delayTime);
     _devices[i]->setFound(found);
   }
 
@@ -113,7 +116,7 @@ bool i2c::scanI2C(int delayTime) {
       success = false;
     }
   }
-
+  //Log.trace(F("i2c::scanI2C returning %T"), success);
   return success;
 }
 
@@ -123,28 +126,31 @@ bool i2c::scanI2C(int delayTime) {
  * 
  * @param address i2c address
  * @param port 
- * @param name 
  * @param delayTime 
  * @return true 
  * @return false 
  */
-bool i2c::probeDevice(uint8_t address, uint8_t port, const char* name, int delayTime) {
+bool i2c::probeDevice(uint8_t address, uint8_t port, int delayTime) {
   byte error;
   bool success = true;
+
+  __FlashStringHelper* name = (__FlashStringHelper*)F("n/a");
+  i2cDevice* d = findDevice(address, port);
+  if (d != nullptr) {
+    name = (__FlashStringHelper*)d->name();
+  }
+
   // The i2c_scanner uses the return value of
   // the Write.endTransmission to see if
   // a device did acknowledge to the address.
   // Log.traceln(F("\nProbing %S %X on port %X"), name, address, port);
+  //Log.trace(F("[Probling %S (%X:%X)...] "), name, address, port);
   Wire.beginTransmission(address);
   delay(delayTime);
   error = Wire.endTransmission();
 
   if (error == 0) {
-    if (port != 0xFF) {
-      Log.notice(F("%S (%X:%X), "), name, address, port);
-    } else {
-      Log.notice(F("%S (%X), "), name, address);
-    }
+    Log.notice(F("%S (%X:%X), "), name, address, port);
   } else if (error == 4) {
     // Errors:
     //  0 : Success
@@ -157,10 +163,57 @@ bool i2c::probeDevice(uint8_t address, uint8_t port, const char* name, int delay
         (const char*)name, address, port, error);
     success = false;
   } else {
-    // not found, but no error
+    //Log.trace(F("[not found]"));
     success = false;
   }
   return success;
+}
+
+// from https://learn.sparkfun.com/tutorials/qwiic-mux-hookup-guide#arduino-example
+#define MUX_ADDR 0x70  //7-bit unshifted default I2C Address
+
+//Enables a specific port number
+bool i2c::enableMuxPort(byte mux, byte portNumber) {
+  if (portNumber > 7) portNumber = 7;
+
+  Wire.beginTransmission(mux);
+  //Read the current mux settings
+  Wire.requestFrom(mux, 1);
+  if (!Wire.available()) return false;  //Error
+  byte settings = Wire.read();
+
+  //Set the wanted bit to enable the port
+  settings |= (1 << portNumber);
+
+  Wire.write(settings);
+  Wire.endTransmission();
+  return true;
+}
+
+//Disables a specific port number
+bool i2c::disableMuxPort(byte mux, byte portNumber) {
+  if (portNumber > 7) portNumber = 7;
+
+  Wire.beginTransmission(mux);
+  //Read the current mux settings
+  Wire.requestFrom(mux, 1);
+  if (!Wire.available()) return false;  //Error
+  byte settings = Wire.read();
+
+  //Clear the wanted bit to disable the port
+  settings &= ~(1 << portNumber);
+
+  Wire.write(settings);
+  Wire.endTransmission();
+  return true;
+}
+
+
+bool wasFound(uint8_t *foundAddr, uint8_t addr) {
+  for (uint8_t i = 0 ; i < 127 ; i++) {
+    if (foundAddr[i] == addr) return true;
+  }
+  return false;
 }
 
 /**
@@ -170,32 +223,47 @@ bool i2c::probeDevice(uint8_t address, uint8_t port, const char* name, int delay
  * @return true 
  * @return false 
  */
-bool i2c::testI2CMux(int delayTime) {
+bool i2c::scan(int delayTime) {
   bool success = true;
 
-  Log.noticeln(F("Scaning the entire I2C address range (addr 0-127, mux 0-7)..."));
+  Log.noticeln(F("Scanning the entire I2C address range (addr 0-127, mux 0-7)..."));
 
+  Wire.begin();
+  Log.noticeln(F("  Wire initialzied"));
+
+  uint8_t foundAddr[128];
+  QWIICMUX mux[8];
+  uint8_t muxes = 0;
+  for (uint8_t address = QWIIC_MUX_DEFAULT_ADDRESS; address < QWIIC_MUX_DEFAULT_ADDRESS+8; address++) {
+    if (mux[muxes].begin(address)) {
+      Log.noticeln(F("  Device at I2C address %X is a mux."), address);
+      muxes++;
+    }
+  }
+
+  Log.noticeln(F("Scanning for devices not on a mux"));
   for (uint8_t address = 0; address < 127; address++) {
-    QWIICMUX mux;
-    if (mux.begin(address)) {
-      Log.traceln(F("Device at I2C address %X is a mux, scanning addr 0-127 across all 8 ports"), address);
-      for (uint8_t port = 0; port < 8; port++) {
-        if (mux.setPort(port)) {
-          Log.traceln(F("  (port: %d, State: %B, isConnected: %T)"),
-              mux.getPort(), mux.getPortState(), mux.isConnected());
-          Log.notice(F("  I2C devices found on mux at %X: "), address);
-          for (uint8_t addressOnMux = 0; addressOnMux < 127; addressOnMux++) {
-            probeDevice(addressOnMux, port, PSTR("n/a"), delayTime);
+    foundAddr[address] = 0xFF;
+    if (probeDevice(address, 0xFF, delayTime)) {
+      //              Log.notice(F("found!"));
+      foundAddr[address] = address;
+    }
+  }
+  Log.noticeln(F(""));
+
+  for (uint8_t m = 0; m < muxes; m++) {
+    Log.noticeln(F("Scanning for devices connected to the mux at %X"), mux->getAddress());
+    for (uint8_t port = 0; port < 8; port++) {
+      Log.notice(F("  Port %X: "), port);
+      for (uint8_t address = 0; address < 127; address++) {
+        //if (mux[m].setPort(port)) {
+        if (!wasFound(foundAddr, address) && enableMuxPort(mux[m].getAddress(), port)) {
+          if (probeDevice(address, port, delayTime)) {
+            //              Log.notice(F("found!"));
           }
-          Log.noticeln(F(""));
-        } else {
-          // no device there
+          disableMuxPort(mux[m].getAddress(), port);
         }
       }
-    } else {
-      // not a mux
-      Log.notice(F("I2C device found: "));
-      probeDevice(address, 0xFF, PSTR("n/a"), delayTime);
       Log.noticeln(F(""));
     }
   }

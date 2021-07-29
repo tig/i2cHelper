@@ -24,6 +24,7 @@ class Motor : public i2cDevice {
    * @return false 
    */
   virtual bool begin() override {
+    //Log.traceln(F("Motor::begin()"));
     bool result = i2cDevice::begin();
     _cachedSpeed = STOP_SPEED;
     _cachedDirection = MOTOR_STOP;
@@ -57,16 +58,16 @@ class Motor : public i2cDevice {
     // Bit 1 set high indicates that the current through the motor has reached 20Amps
     // Bit 2 set high indicates that the over temperature limiter is active.
     // Bit 7 is the busy flag (never seen)
-    const char *nominal = PSTR("nominal");
+    const char *nominal = PSTR("ok");
 #if defined(ARDUINO_ARCH_SAMD) || defined(ARDUINO_ARCH_ESP32)
     // these platforms do not support PROGMEM
-    sprintf((char *)_statusString, "acceleration: %s, current: %s, temperature: %s",
-        (_cachedStatus & 1) ? "accelerating" : nominal,
+    sprintf((char *)_statusString, "a: %s, c: %s, t: %s",
+        (_cachedStatus & 1) ? "yes" :"no",
         (_cachedStatus & 2) ? "max" : nominal,
         (_cachedStatus & 3) ? "over" : nominal);
 #else
-    sprintf_P((char *)_statusString, F("acceleration: %S | current: %S | temperature: %S"),
-        (_cachedStatus & 1) ? F("accelerating") : (__FlashStringHelper *)nominal,
+    sprintf_P((char *)_statusString, F("a: %S | c: %S | t: %S"),
+        (_cachedStatus & 1) ? F("yes") : F("no"),
         (_cachedStatus & 2) ? F("max") : (__FlashStringHelper *)nominal,
         (_cachedStatus & 3) ? F("over") : (__FlashStringHelper *)nominal);
 #endif
@@ -81,7 +82,10 @@ class Motor : public i2cDevice {
    */
   virtual void setSpeed(uint8_t speed) {
     _cachedSpeed = speed;
-    //Log.traceln(F("Motor::setSpeed(%d); was %d"), speed, _cachedSpeed);
+    if (!initialized()) {
+      Log.errorln(F("ERROR: Motor::setSpeed() when not initialized."));
+      return;
+    }
 #ifdef SIMULATION
     digitalWrite(address(), _cachedSpeed > 0 ? HIGH : LOW);
 #endif
@@ -97,6 +101,11 @@ class Motor : public i2cDevice {
    */
   virtual void setAcceleration(uint8_t acceleration) {
     _cachedAccel = acceleration;
+    if (!initialized()) {
+      Log.errorln(F("ERROR: Motor::setAcceleration() when not initialized."));
+      return;
+    }
+
 #ifndef SIMULATION
     digitalWrite(address(), _cachedAccel > 0 ? HIGH : LOW);
 #endif
@@ -144,7 +153,11 @@ class Motor : public i2cDevice {
    */
   void forward() {
     _cachedDirection = MOTOR_FORWARD;
-    setSpeed(STOP_SPEED);
+    if (!initialized()) {
+      Log.errorln(F("ERROR: Motor::forward() when not initialized."));
+      return;
+    }
+    setSpeed(FULL_SPEED);
   }
 
   /**
@@ -153,7 +166,11 @@ class Motor : public i2cDevice {
    */
   void reverse() {
     _cachedDirection = MOTOR_BACKWARD;
-    setSpeed(STOP_SPEED);
+    if (!initialized()) {
+      Log.errorln(F("ERROR: Motor::reverse() when not initialized."));
+      return;
+    }
+    setSpeed(FULL_SPEED);
   }
 
   virtual uint8_t direction() {
@@ -191,7 +208,11 @@ class Motor : public i2cDevice {
    * cached members.
    * 
    */
-  void probe() {
+  virtual bool probe() {
+    if (!initialized()) {
+      Log.errorln(F("ERROR: Motor::probe() when not initialized."));
+      return false;
+    }
     getStatus();
     speed();
     acceleration();
@@ -199,6 +220,7 @@ class Motor : public i2cDevice {
     temperature();
     current();
     i2cDevice::address();
+    return true;
   }
 
   /**
@@ -209,12 +231,16 @@ class Motor : public i2cDevice {
    */
   size_t printTo(Print &p) const {
     int n = i2cDevice::printTo(p);
-    n += p.print(F("direction: "));
+    n += p.print(F("dir: "));
     n += p.print(directionString());
-    n += p.print(F(", speed: "));
+    n += p.print(F(", spd: "));
     n += p.print(_cachedSpeed, DEC);
-    n += p.print(F(", accel: "));
+    n += p.print(F(", acc: "));
     n += p.print(_cachedAccel, DEC);
+    n += p.print(F(", amps: "));
+    n += p.print(_cachedCurrent, DEC);
+    n += p.print(F(", temp: "));
+    n += p.print(_cachedTemperature, DEC);
     n += p.print(F(", "));
     return n += p.print(getStatusString());
   };
@@ -231,28 +257,41 @@ class Motor : public i2cDevice {
    * @brief MD04 motor controller speed register (SPEEDREG) settings
    * 
    */
-  static const uint8_t ACCEL_RATE = 10;   // 0 is 0.187s, 255 is just under 8 seconds
+  static const uint8_t ACCEL_RATE = 100;   // 0 is 0.187s, 255 is just under 8 seconds
   static const uint8_t FULL_SPEED = 255;  // Maximum speed
   static const uint8_t STOP_SPEED = 0;    // speed when stopped
 
  protected:
-  uint8_t _cachedDirection;
+  uint8_t _cachedDirection = MOTOR_STOP;
 
  private:
-  uint8_t _cachedStatus;
-  char _statusString[255];
-  uint32_t _cachedSpeed;
-  uint8_t _cachedAccel;
-  uint8_t _cachedTemperature;
-  uint8_t _cachedCurrent;
+  uint8_t _cachedStatus = 0;
+  char _statusString[255] = "\0";
+  uint32_t _cachedSpeed = STOP_SPEED;
+  uint8_t _cachedAccel = ACCEL_RATE;
+  uint8_t _cachedTemperature = 0;
+  uint8_t _cachedCurrent = 0;
 };
 
 class AdafruitMotorController : public Motor {
  public:
+  using Motor::Motor;
+  AdafruitMotorController(uint8_t address, uint8_t muxPort, const __FlashStringHelper *name, QWIICMUX *mux, bool isMux = false)
+      : Motor(address, muxPort, name, mux, isMux),
+        _motorController(nullptr),
+        _cmdReg(nullptr),
+        _statusReg(nullptr),
+        _speedReg(nullptr),
+        _accelReg(nullptr),
+        _tempReg(nullptr),
+        _currentReg(nullptr) {}
+
   virtual bool begin() override {
+    //Log.traceln(F("AdafruitMotorController::begin()"));
     bool success = Motor::begin();
 
     if (_motorController != nullptr) {
+      Log.trace(F("  Motor was previously initialized. Cleaning up. "));
       delete _motorController;
       delete _cmdReg;
       delete _statusReg;
@@ -260,6 +299,8 @@ class AdafruitMotorController : public Motor {
       delete _accelReg;
       delete _currentReg;
     }
+    //Log.trace(F("  Initializing motor ["));
+
     _motorController = new Adafruit_I2CDevice(address());
     _cmdReg = new Adafruit_BusIO_Register(_motorController, REG_CMD, 1, LSBFIRST);
     _statusReg = new Adafruit_BusIO_Register(_motorController, REG_STATUS, 1, LSBFIRST);
@@ -268,38 +309,35 @@ class AdafruitMotorController : public Motor {
     _tempReg = new Adafruit_BusIO_Register(_motorController, REG_TEMP, 1, LSBFIRST);
     _currentReg = new Adafruit_BusIO_Register(_motorController, REG_CURRENT, 1, LSBFIRST);
 
-    if (!_motorController->begin(false)) {
-      Log.errorln(F(" ERROR: Did not find motor controller at %X"),
-          address());
-      success = false;
-    } else {
-      Log.trace(F("  Initializing motor ["));
-
-      // Must set speed first when stopping
-      Log.trace(F("speed -> %d, "), STOP_SPEED);
-      _speedReg->write(STOP_SPEED, 1);
-
-      Log.trace(F("accel rate -> %d, "), ACCEL_RATE);
-      _accelReg->write(ACCEL_RATE, 1);
-
-      Log.trace(F("command -> %d]"), MOTOR_STOP);
-      _cmdReg->write(MOTOR_STOP, 1);
-
-      Log.trace(F("  Verifying motor ["));
-      uint8_t byte;
-      _speedReg->read(&byte);
-      //assert(byte == _cachedSpeed);
-      Log.trace(F("speed = %d, "), byte);
-
-      _accelReg->read(&byte);
-      Log.trace(F("accel rate = %d, "), byte);
-
-      _cmdReg->read(&byte);
-      //assert(byte == _cachedDirection);
-      Log.trace(F("command = %d]"), byte);
-
-      Log.noticeln(F("%p"), this);
+    if (!_motorController->begin()) {
+      Log.errorln(F("\nERROR: Adafruit motor controller failed to init"));
+      return false;
     }
+
+    // Must set speed first when stopping
+    //Log.trace(F("speed -> %d, "), STOP_SPEED);
+    _speedReg->write(STOP_SPEED, 1);
+
+    //Log.trace(F("accel rate -> %d, "), ACCEL_RATE);
+    _accelReg->write(ACCEL_RATE, 1);
+
+    //Log.trace(F("command -> %d]"), MOTOR_STOP);
+    _cmdReg->write(MOTOR_STOP, 1);
+
+    //Log.trace(F("  Verifying motor ["));
+    uint8_t byte;
+    _speedReg->read(&byte);
+    //assert(byte == _cachedSpeed);
+    //Log.trace(F("speed = %d, "), byte);
+
+    _accelReg->read(&byte);
+    //Log.trace(F("accel rate = %d, "), byte);
+
+    _cmdReg->read(&byte);
+    //assert(byte == _cachedDirection);
+    //Log.trace(F("command = %d]"), byte);
+
+    Log.trace(F(" [%p]"), this);
     return success;
   }
 
@@ -307,7 +345,7 @@ class AdafruitMotorController : public Motor {
     Motor::getStatus();
     uint8_t byte;
     if (!_statusReg->read(&byte)) {
-      Log.errorln(F("ERROR: Failed to read motor temperature"));
+      Log.errorln(F("ERROR: Failed to read motor status"));
     }
     setStatus(byte);
     return byte;
@@ -322,10 +360,16 @@ class AdafruitMotorController : public Motor {
    */
   virtual void setSpeed(uint8_t speed) override {
     Motor::setSpeed(speed);
-    // MUST set speed first, then direction
-    _speedReg->write(speed, 1);
-    // note we don't do MOTOR_STOP; doing so overrides acelleration!
+
     _cmdReg->write(Motor::acceleration(), 1);
+
+    _cmdReg->write(Motor::direction(), 1);
+
+    // MUST set speed first, then direction
+    // note we don't do MOTOR_STOP; doing so overrides acelleration!
+    _speedReg->write(speed, 1);
+
+    Log.traceln(F("Motor::setSpeed() - %p"), this);
   }
 
   virtual uint32_t speed() override {
@@ -393,6 +437,8 @@ class AdafruitMotorController : public Motor {
     _cmdReg->write(MOTOR_STOP, 1);
     // TODO: why is this here?
     delay(100);
+    probe();
+    Log.traceln(F("Motor::emergencyStop() - %p"), this);
   }
 
   virtual uint8_t direction() override {
@@ -401,7 +447,19 @@ class AdafruitMotorController : public Motor {
       Log.errorln(F("ERROR: Failed to read motor dirction"));
     }
     Motor::setDirection(byte);
+   
     return Motor::direction();
+  }
+
+  virtual bool probe() override {
+    if (!Motor::probe()) return false;
+    getStatus();
+    speed();
+    acceleration();
+    direction();
+    temperature();
+    current();
+    return true;
   }
 
  private:
@@ -414,7 +472,6 @@ class AdafruitMotorController : public Motor {
   Adafruit_BusIO_Register *_accelReg;
   Adafruit_BusIO_Register *_tempReg;
   Adafruit_BusIO_Register *_currentReg;
-  uint8_t _motorBuffer[8];  // buffer for accessing the motor controller I2C regs
 
   /**
   * @brief Devantech MD04 info
