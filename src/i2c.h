@@ -6,6 +6,24 @@
 #include <SparkFun_I2C_Mux_Arduino_Library.h>
 #include <Adafruit_BusIO_Register.h>
 
+class i2cDevice;
+
+// /**
+//  * \brief Function that gets called when the state of a i2cDevice changes
+//  *
+//  * \param device The i2cDevice
+//  * \param propertyName The name of the property that changed
+//  * \param newValue The new value
+//  */
+// typedef void (*StateChanged)(i2cDevice &device, const __FlashStringHelper* propertyName, void* newValue);
+
+
+// template< typename Functor, typename ParamType >
+// void DoSmth(Functor isGood, const ParamType param){
+//    //...
+//    if(isGood(param, some_int_calculated_here)) doSmthElse();
+// }
+
 /**
  * @brief defines each i2c device. Create an array of these and
  * pass to `begin()`.
@@ -22,76 +40,20 @@ class i2cDevice : public Printable {
    * @return true 
    * @return false 
    */
-  virtual bool begin() {
-    //Log.traceln(F("i2cDevice::begin - %S - (%X:%X) isMux = %T, mux &%X"), name(), address(), muxPort(), isMux(), mux());
-    if (isMux() || muxPort() != 0xFF) assert(_mux);
-    if (mux() != nullptr && isMux()) {
-      //Log.trace(F("QWIICMUX::begin..."));
-      if (!mux()->begin()) {
-        Log.errorln(F("  ERROR: %S QWIICMUX begin failed for (%X:%X) mux addr: %X"), name(), address(), muxPort(), mux()->getAddress());
-        //return false;
-      }
-      //Log.trace(F("back from QWIICMUX::begin."));
-    }
-    _initialized = true;
-    _initialized = setPort();
-    //Log.trace(F("(begin returning %)"), _initialized);
-    return _initialized;
-  }
+  virtual bool begin();
+  virtual bool setPort();
 
-  virtual bool setPort() {
-    //Log.trace(F("(setPort() %S on (%X:%X))"), name(), address(), muxPort());
-    if (!initialized()) {
-      Log.errorln(F("  ERROR: %S on (%X:%X) i2cDevice::setPort() when not initialized."), name(), address(), muxPort());
-      return false;
-    }
-    if (isMux() || muxPort() != 0xFF) assert(_mux);
-    if (muxPort() == 0xFF) {
-      //Log.trace(F("(SetPort for %S on I2C address %X - Not needed; no mux)"), name(), address());
-    } else {
-      //Log.trace(F("(SetPort for %S on (%X:%X) - Mux address is %X)"), name(), address(), muxPort(), mux()->getAddress());
-      if (!mux()->setPort(muxPort())) {
-        Log.errorln(F("  ERROR: %S QWIICMUX setPort failed for (%X:%X)"), name(), address(), muxPort());
-        return false;
-      } else {
-        //uint8_t b = mux()->getPort();
-        //Log.trace(F("(GetPort for %S says %X)"), name(), b);
-      }
-    }
-    return true;
-  }
-
-  uint8_t address() const { return _address; }
-  void setAddress(uint8_t address) { _address = address; }
-  uint8_t muxPort() const { return _muxPort; }
-  void setMuxPort(uint8_t muxPort) { _muxPort = muxPort; }
-  const __FlashStringHelper* name() const {
-    if (_name == nullptr) {
-      return F("n/a");
-    } else {
-      return _name;
-    }
-  }
-
-  QWIICMUX* mux() {
-    if (isMux() || muxPort() != 0xFF) assert(_mux);
-    return _mux;
-  }
-  bool isMux() const { return _isMux; }
-  bool found() { return _found; }
-  void setFound(bool found) { _found = found; }
-  bool initialized() { return _initialized; }
-
-  /**
-   * @brief `Printable::printTo` - prints the current motor state (direction & speed)
-   *
-   * @param p
-   * @return size_t
-   */
-  virtual size_t printTo(Print& p) const {
-    int n = p.print(name());
-    return n += p.print(F(" = "));
-  }
+  uint8_t address() const;
+  void setAddress(uint8_t address);
+  uint8_t muxPort() const;
+  void setMuxPort(uint8_t muxPort);
+  const __FlashStringHelper* name() const;
+  QWIICMUX* mux();
+  bool isMux() const;
+  bool found();
+  void setFound(bool found);
+  bool initialized();
+  virtual size_t printTo(Print& p) const;
 
  private:
   uint8_t _address;

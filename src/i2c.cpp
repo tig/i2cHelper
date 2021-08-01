@@ -8,6 +8,92 @@
 
 static const char errorStr[] PROGMEM = "n/a";
 
+// ---- i2cDevice class
+
+
+  /**
+   * @brief sets up the device
+   * 
+   * @return true 
+   * @return false 
+   */
+  bool i2cDevice::begin() {
+    //Log.traceln(F("i2cDevice::begin - %S - (%X:%X) isMux = %T, mux &%X"), name(), address(), muxPort(), isMux(), mux());
+    if (isMux() || muxPort() != 0xFF) assert(_mux);
+    if (mux() != nullptr && isMux()) {
+      //Log.trace(F("QWIICMUX::begin..."));
+      if (!mux()->begin()) {
+        Log.errorln(F("  ERROR: %S QWIICMUX begin failed for (%X:%X) mux addr: %X"), name(), address(), muxPort(), mux()->getAddress());
+        //return false;
+      }
+      //Log.trace(F("back from QWIICMUX::begin."));
+    }
+    _initialized = true;
+    _initialized = setPort();
+    //Log.trace(F("(begin returning %)"), _initialized);
+    return _initialized;
+  }
+
+  bool i2cDevice::setPort() {
+    //Log.trace(F("(setPort() %S on (%X:%X))"), name(), address(), muxPort());
+    if (!initialized()) {
+      Log.errorln(F("  ERROR: %S on (%X:%X) i2cDevice::setPort() when not initialized."), name(), address(), muxPort());
+      return false;
+    }
+    if (isMux() || muxPort() != 0xFF) assert(_mux);
+    if (muxPort() == 0xFF) {
+      //Log.trace(F("(SetPort for %S on I2C address %X - Not needed; no mux)"), name(), address());
+    } else {
+      //Log.trace(F("(SetPort for %S on (%X:%X) - Mux address is %X)"), name(), address(), muxPort(), mux()->getAddress());
+      if (!mux()->setPort(muxPort())) {
+        Log.errorln(F("  ERROR: %S QWIICMUX setPort failed for (%X:%X)"), name(), address(), muxPort());
+        return false;
+      } else {
+        //uint8_t b = mux()->getPort();
+        //Log.trace(F("(GetPort for %S says %X)"), name(), b);
+      }
+    }
+    return true;
+  }
+
+  uint8_t i2cDevice::address() const { 
+    return _address;
+  }
+
+  void i2cDevice::setAddress(uint8_t address) { _address = address; }
+  uint8_t i2cDevice::muxPort() const { return _muxPort; }
+  void i2cDevice::setMuxPort(uint8_t muxPort) { _muxPort = muxPort; }
+  const __FlashStringHelper* i2cDevice::name() const {
+    if (_name == nullptr) {
+      return F("n/a");
+    } else {
+      return _name;
+    }
+  }
+
+  QWIICMUX* i2cDevice::mux() {
+    if (isMux() || muxPort() != 0xFF) assert(_mux);
+    return _mux;
+  }
+  bool i2cDevice::isMux() const { return _isMux; }
+  bool i2cDevice::found() { return _found; }
+  void i2cDevice::setFound(bool found) { _found = found; }
+  bool i2cDevice::initialized() { return _initialized; }
+
+  /**
+   * @brief `Printable::printTo` - prints the current motor state (direction & speed)
+   *
+   * @param p
+   * @return size_t
+   */
+  size_t i2cDevice::printTo(Print& p) const {
+    int n = p.print(name());
+    return n += p.print(F(" = "));
+  }
+
+
+// ---- i2c class
+
 /**
  * @brief Global instance of the I2C bus.
  * 
