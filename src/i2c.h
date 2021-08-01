@@ -82,6 +82,10 @@ class i2cDevice : public Printable {
   void setFound(bool found) { _found = found; }
   bool initialized() { return _initialized; }
 
+
+  virtual void probe() { }
+
+
   /**
    * @brief `Printable::printTo` - prints the current motor state (direction & speed)
    *

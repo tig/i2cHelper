@@ -19,6 +19,7 @@ class ContactSensor : public i2cDevice {
 
   virtual bool isContacted() {
     setPort();
+    //Log.traceln(F("ContactSensor::isContacted = %T"), _contact);
     return _contact;
   };
 
@@ -63,13 +64,20 @@ class QwiicContactSensor : public ContactSensor {
 
   virtual bool isContacted() override {
     ContactSensor::isContacted();
-    return _contact = _button.isPressed();
+
+    _contact = _button.isPressed();
+    //Log.traceln(F("QwiicContactSensor::isContacted = %T"), _contact);
+    return _contact;
   };
 
   void setContact(bool contact) override {
     ContactSensor::setContact(contact);
     digitalWrite(address(), contact);
   };
+
+  virtual void probe() {
+    isContacted();
+  }
 
  private:
   QwiicButton _button;
