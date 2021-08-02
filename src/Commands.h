@@ -1,6 +1,18 @@
 #pragma once
-#include <Ethernet.h>
 #include <Shell.h>
+
+#ifdef ARDUINO_ARCH_ESP32
+#define USE_WIFI
+#include <WiFi.h>
+#define USE_WIFI
+#undef USE_ETHERNET
+#else
+#define USE_ETHERNET
+#endif  // ESP32
+
+#ifdef USE_ETHERNET
+#include <Ethernet.h>
+#endif
 
 // P1AM
 #ifdef ARDUINO_ARCH_SAMD
@@ -28,57 +40,60 @@
  * This class leverages the ArduinoShell library. 
  */
 class Commands : public Printable {
+ private:
+  static const uint16_t MAX_CLIENTS = 4;
+
  public:
-  // Initilaize the REST API
-  bool begin(bool raw = false);
+  // Initialize the Commands over Serial
+  bool begin();
+
+  // Initialize the Commands interface over Ethernet / Wifi (telnet)
+  bool beginServer(const char* ssid = nullptr, const char* pwd = nullptr);
 
   // Call every iteration of loop()
   void handle();
 
   void logCommand(const __FlashStringHelper* name, int argc, const ShellArguments& argv);
 
-  // bool execute(const __FlashStringHelper* cmd) {
-  //   return _serialShell.execute(cmd);
-  // }
-
-
   Shell _serialShell;
-  Shell _telnetShell;
+  Shell _telnetShell[MAX_CLIENTS];
   char shellPrompt[2] = ">";
 
-  bool getRaw() { return _raw; }
-  void setRaw(bool raw) {
-    _raw = raw;
-    if (_raw) {
-      _telnetShell.setEcho(false);
-      _telnetShell.setPrompt(nullptr);
-    } else {
-      _telnetShell.setEcho(true);
-      _telnetShell.setPrompt(shellPrompt);
-    }
-  }
-
-  
   /**
    * @brief `Printable::printTo` -    *
    * @param p
    * @return size_t
    */
-  size_t printTo(Print &p) const override {
+  size_t printTo(Print& p) const override {
     int n = p.print(F("IP Address = "));
+#ifdef USE_WIFI
+    return n += p.print(WiFi.localIP());
+#endif
+#ifdef USE_ETHERNET
     return n += p.print(Ethernet.localIP());
+#endif
   };
 
- private:
+ //private:
   // Networking
   byte _macaddress[6];
-  IPAddress _ip;  // static address
-  EthernetServer _shellServer;
-  EthernetClient _shellClient;
-  bool _haveClient = false;
+  IPAddress _ip;
+  static const uint16_t _tcpPort = 23;
+#ifdef USE_WIFI
+  WiFiServer _shellServer;
+  WiFiClient* _shellClient[MAX_CLIENTS];
+#endif
+#ifdef USE_ETHERNET
+  EthernetServer _shellServer = _tcpPort;
+  EthernetClient* _shellClient[MAX_CLIENTS];
+#endif
   bool _isInitialized = false;
-  bool _raw = false;
-  bool _ethernetWasConnected = false;
+#ifdef USE_ETHERNET
+  bool _netWasConnected = false;
+#endif
+#ifdef USE_WIFI
+  bool _autoConnectWifi = true;
+#endif
 
   // =======================================================
   // Singleton support
@@ -96,7 +111,7 @@ class Commands : public Printable {
 
  private:
   // Prohibiting External Constructions
-  Commands();
+  Commands() : _macaddress{MAC_ADDRESS}, _ip(STATIC_IP) {}
 
   // C++ 11
   // =======

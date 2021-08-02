@@ -17,11 +17,40 @@ class ContactSensor : public i2cDevice {
  public:
   using i2cDevice::i2cDevice;
 
+  const int BUTTON_PIN = 0;
+
+  virtual bool begin() override {
+    if (address() == 0xFF) {
+      pinMode(BUTTON_PIN, INPUT_PULLUP);
+      bool b = digitalRead(BUTTON_PIN) == LOW;
+      setContact(b);
+    }
+    return true;
+  }
+
   virtual bool isContacted() {
     setPort();
     //Log.traceln(F("ContactSensor::isContacted = %T"), _contact);
+
+    if (address() == 0xFF) {
+      bool b = digitalRead(BUTTON_PIN) == LOW;
+      if (b != _contact) {
+        _contact = b;
+        notify();
+      }
+    }
     return _contact;
   };
+
+  virtual void probe() override {
+    if (address() == 0xFF) {
+      bool b = digitalRead(BUTTON_PIN) == LOW;
+      if (b != _contact) {
+        _contact = b;
+        notify();
+      }
+    }
+  }
 
   // for testing only
   virtual void setContact(bool contact) {
@@ -58,7 +87,7 @@ class QwiicContactSensor : public ContactSensor {
         Log.errorln(F("  ERROR: %S setup failed. isConnected = %T, DeviceID() = %X"), name(), _button.isConnected(), _button.deviceID());
       }
       Log.trace(F(" [%p]"), this);
-    } 
+    }
     return success;
   };
 
@@ -82,7 +111,6 @@ class QwiicContactSensor : public ContactSensor {
  private:
   QwiicButton _button;
 };
-
 
 /**
  * @brief Base class for distance sensors
@@ -176,7 +204,7 @@ class VL53L1XDistanceSensor : public DistanceSensor {
           }
         }
         setDistance(_sensor->getDistance());
-      Log.trace(F(" [%p]"), this);
+        Log.trace(F(" [%p]"), this);
       }
     } else {
       Log.errorln(F("    ERROR: VL53L1XDistanceSensor::begin() failed"));

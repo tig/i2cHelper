@@ -62,7 +62,7 @@ class Motor : public i2cDevice {
 #if defined(ARDUINO_ARCH_SAMD) || defined(ARDUINO_ARCH_ESP32)
     // these platforms do not support PROGMEM
     sprintf((char *)_statusString, "a: %s, c: %s, t: %s",
-        (_cachedStatus & 1) ? "yes" :"no",
+        (_cachedStatus & 1) ? "yes" : "no",
         (_cachedStatus & 2) ? "max" : nominal,
         (_cachedStatus & 3) ? "over" : nominal);
 #else
@@ -256,7 +256,7 @@ class Motor : public i2cDevice {
    * @brief MD04 motor controller speed register (SPEEDREG) settings
    * 
    */
-  static const uint8_t ACCEL_RATE = 100;   // 0 is 0.187s, 255 is just under 8 seconds
+  static const uint8_t ACCEL_RATE = 100;  // 0 is 0.187s, 255 is just under 8 seconds
   static const uint8_t FULL_SPEED = 255;  // Maximum speed
   static const uint8_t STOP_SPEED = 0;    // speed when stopped
 
@@ -275,15 +275,16 @@ class Motor : public i2cDevice {
 class AdafruitMotorController : public Motor {
  public:
   using Motor::Motor;
-  AdafruitMotorController(uint8_t address, uint8_t muxPort, const __FlashStringHelper *name, QWIICMUX *mux, bool isMux = false)
-      : Motor(address, muxPort, name, mux, isMux),
-        _motorController(nullptr),
-        _cmdReg(nullptr),
-        _statusReg(nullptr),
-        _speedReg(nullptr),
-        _accelReg(nullptr),
-        _tempReg(nullptr),
-        _currentReg(nullptr) {}
+  // AdafruitMotorController(uint8_t address, uint8_t muxPort,
+  //     const __FlashStringHelper *name, QWIICMUX *mux, bool isMux = false)
+  //     : Motor(address, muxPort, name, mux, isMux),
+  //       _motorController(nullptr),
+  //       _cmdReg(nullptr),
+  //       _statusReg(nullptr),
+  //       _speedReg(nullptr),
+  //       _accelReg(nullptr),
+  //       _tempReg(nullptr),
+  //       _currentReg(nullptr) {}
 
   virtual bool begin() override {
     //Log.traceln(F("AdafruitMotorController::begin()"));
@@ -446,7 +447,7 @@ class AdafruitMotorController : public Motor {
       Log.errorln(F("ERROR: Failed to read motor dirction"));
     }
     Motor::setDirection(byte);
-   
+
     return Motor::direction();
   }
 
@@ -461,15 +462,15 @@ class AdafruitMotorController : public Motor {
   }
 
  private:
-  Adafruit_I2CDevice *_motorController;
+  Adafruit_I2CDevice *_motorController = nullptr;
 
   // MD04 I2C Motor controller
-  Adafruit_BusIO_Register *_cmdReg;
-  Adafruit_BusIO_Register *_statusReg;
-  Adafruit_BusIO_Register *_speedReg;
-  Adafruit_BusIO_Register *_accelReg;
-  Adafruit_BusIO_Register *_tempReg;
-  Adafruit_BusIO_Register *_currentReg;
+  Adafruit_BusIO_Register *_cmdReg = nullptr;
+  Adafruit_BusIO_Register *_statusReg = nullptr;
+  Adafruit_BusIO_Register *_speedReg = nullptr;
+  Adafruit_BusIO_Register *_accelReg = nullptr;
+  Adafruit_BusIO_Register *_tempReg = nullptr;
+  Adafruit_BusIO_Register *_currentReg = nullptr;
 
   /**
   * @brief Devantech MD04 info

@@ -18,6 +18,7 @@ class Relay : public i2cDevice {
 #ifndef SIMULATION
     digitalWrite(address(), _state);
 #endif
+    notify();
   };
 
   virtual void turnRelayOff() {
@@ -25,6 +26,7 @@ class Relay : public i2cDevice {
 #ifndef SIMULATION
     digitalWrite(address(), _state);
 #endif
+    notify();
   };
 
   virtual void toggleRelay() {
@@ -32,11 +34,15 @@ class Relay : public i2cDevice {
 #ifndef SIMULATION
     digitalWrite(address(), _state);
 #endif
+    notify();
   };
 
   virtual void setState(uint8_t state) {
     //Log.traceln(F("Relay::state() setting to %d"), state);
-    _state = state;
+    if (_state != state) {
+      _state = state;
+      notify();
+    }
   };
 
   virtual uint8_t state() {
