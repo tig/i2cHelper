@@ -208,10 +208,10 @@ class Motor : public i2cDevice {
    * cached members.
    * 
    */
-  virtual bool probe() {
+  virtual void probe() override {
     if (!initialized()) {
       Log.errorln(F("ERROR: Motor::probe() when not initialized."));
-      return false;
+      return;
     }
     getStatus();
     speed();
@@ -220,7 +220,6 @@ class Motor : public i2cDevice {
     temperature();
     current();
     i2cDevice::address();
-    return true;
   }
 
   /**
@@ -451,15 +450,14 @@ class AdafruitMotorController : public Motor {
     return Motor::direction();
   }
 
-  virtual bool probe() override {
-    if (!Motor::probe()) return false;
+  virtual void probe() override {
+    Motor::probe();
     getStatus();
     speed();
     acceleration();
     direction();
     temperature();
     current();
-    return true;
   }
 
  private:

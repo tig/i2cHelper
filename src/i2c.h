@@ -6,6 +6,9 @@
 #include <SparkFun_I2C_Mux_Arduino_Library.h>
 #include <Adafruit_BusIO_Register.h>
 
+#include <functional>
+#include <vector>
+
 class i2cDevice;
 
 // /**
@@ -15,14 +18,22 @@ class i2cDevice;
 //  * \param propertyName The name of the property that changed
 //  * \param newValue The new value
 //  */
-// typedef void (*StateChanged)(i2cDevice &device, const __FlashStringHelper* propertyName, void* newValue);
+// typedef void (*StateChanged)(i2cDevice& device,
+//     const __FlashStringHelper* propertyName,
+//     void* newValue);
 
 
-// template< typename Functor, typename ParamType >
-// void DoSmth(Functor isGood, const ParamType param){
-//    //...
-//    if(isGood(param, some_int_calculated_here)) doSmthElse();
-// }
+
+using namespace std;
+
+class EventHandler {
+    public:
+        void addHandler(std::function<void(int)> callback) {
+            //printf("\nHandler added...");
+            // Let's pretend an event just occured
+            //callback(1);
+        }
+};
 
 /**
  * @brief defines each i2c device. Create an array of these and
@@ -32,7 +43,13 @@ class i2cDevice;
 class i2cDevice : public Printable {
  public:
   i2cDevice(uint8_t address, uint8_t muxPort, const __FlashStringHelper* name, QWIICMUX* mux, bool isMux = false)
-      : _address(address), _muxPort(muxPort), _name(name), _mux(mux), _isMux(isMux), _initialized(false) {}
+      : _address(address),
+        _muxPort(muxPort),
+        _name(name),
+        _mux(mux),
+        _isMux(isMux),
+        //callbacks_(nullptr),
+        _initialized(false) {}
 
   /**
    * @brief sets up the device
@@ -41,6 +58,7 @@ class i2cDevice : public Printable {
    * @return false 
    */
   virtual bool begin();
+  virtual void probe() { notify(); }
   virtual bool setPort();
 
   uint8_t address() const;
@@ -55,6 +73,23 @@ class i2cDevice : public Printable {
   bool initialized();
   virtual size_t printTo(Print& p) const;
 
+  template<class T> void registerStateChange(T* const object, void(T::* const mf)())
+  {
+    using namespace std::placeholders; 
+    callbacks_.emplace_back(std::bind(mf, object));
+  }
+
+  void registerStateChange(void(* const fun)()) 
+  {
+    callbacks_.emplace_back(fun);
+  }
+
+  void notify() 
+  {
+    for (const auto& cb : callbacks_)
+      cb();
+  }
+
  private:
   uint8_t _address;
   uint8_t _muxPort;  // 0xFF if not on mux
@@ -62,6 +97,7 @@ class i2cDevice : public Printable {
   QWIICMUX* _mux;
   bool _isMux;
   bool _found;
+  std::vector<std::function<void()>> callbacks_;
   bool _initialized;
 };
 

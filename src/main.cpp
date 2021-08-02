@@ -109,7 +109,7 @@ i2cDevice* my_devices[] = {
     _resurrectionRelay};
 
 unsigned long DELAY_TIME = 1000;
-unsigned long _timer =0;
+unsigned long _timer = 0;
 /**
  * @brief Number of seconds (DELAY_TIME) to log state in the loop
  */
@@ -167,7 +167,7 @@ ShellCommandRegister* cmdInit = ShellCommandClass(init, "Inits - [all|mux|fwd|rw
         success = false;
         Log.errorln(F("ERROR: Bus.begin() failed"));
       } else {
-        Log.noticeln(F("The I2C bus initialzied"));
+        Log.noticeln(F("\n------------- All devices initialzied. The system is functional.\n"));
         success = true;
         _logStateInLoopFor = 1;
       }
@@ -240,35 +240,37 @@ ShellCommandRegister* cmdGet = ShellCommandClass(get, "Gets state - [all|i2c|ip|
     Cmds._telnetShell.println(*_rearwardDistanceSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("fwdend")))) {
-    _forwardEndRangeSensor->isContacted();
+    _forwardEndRangeSensor->probe();
     Log.noticeln(F("%p"), *_forwardEndRangeSensor);
     Cmds._telnetShell.println(*_forwardEndRangeSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("rwdend")))) {
-    _rearwardEndRangeSensor->isContacted();
+    _rearwardEndRangeSensor->probe();
     Log.noticeln(F("%p"), *_rearwardEndRangeSensor);
     Cmds._telnetShell.println(*_rearwardEndRangeSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("opened")))) {
+    _openedSensor->probe();
     Log.noticeln(F("%p"), *_openedSensor);
     Cmds._telnetShell.println(*_openedSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("closed")))) {
+    _closedSensor->probe();
     Log.noticeln(F("%p"), *_closedSensor);
     Cmds._telnetShell.println(*_closedSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("relay1")))) {
-    _actuatorRelay1->state();
+    _actuatorRelay1->probe();
     Log.noticeln(F("%p"), *_actuatorRelay1);
     Cmds._telnetShell.println(*_actuatorRelay1);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("relay2")))) {
-    _actuatorRelay2->state();
+    _actuatorRelay2->probe();
     Log.noticeln(F("%p"), *_actuatorRelay2);
     Cmds._telnetShell.println(*_actuatorRelay2);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("resurrect")))) {
-    _resurrectionRelay->state();
+    _resurrectionRelay->probe();
     Log.noticeln(F("%p"), *_resurrectionRelay);
     Cmds._telnetShell.println(*_resurrectionRelay);
   }
@@ -325,7 +327,7 @@ ShellCommandRegister* cmdMotor = ShellCommandClass(motor, "Controls the motor - 
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("speed"))) {
     if (argc > 2) {
       _motorController->setSpeed(strtol(argv[2], nullptr, 10));
-    _logStateInLoopFor = 20;
+      _logStateInLoopFor = 20;
     } else {
       _motorController->probe();
       Cmds._telnetShell.println(_motorController->speed(), DEC);
@@ -347,25 +349,27 @@ ShellCommandRegister* cmdMotor = ShellCommandClass(motor, "Controls the motor - 
   Cmds._telnetShell.println(*_motorController);
 });
 
+#define LA_DELAY 0
+
 ShellCommandRegister* cmdLA = ShellCommandClass(la, "Controls linear actuator via relays 1 & 2 - ([extend|retract|off])", {
   Cmds.logCommand(command->name, argc, argv);
 
   if (argc > 1 && !strcmp_P(argv[1], PSTR("extend"))) {
-    delay(500);
+    delay(LA_DELAY);
     _actuatorRelay1->turnRelayOff();
-    delay(500);
+    delay(LA_DELAY);
     _actuatorRelay2->turnRelayOn();
   }
   if (argc > 1 && !strcmp_P(argv[1], PSTR("retract"))) {
-    delay(500);
+    delay(LA_DELAY);
     _actuatorRelay2->turnRelayOff();
-    delay(500);
+    delay(LA_DELAY);
     _actuatorRelay1->turnRelayOn();
   }
   if (argc > 1 && !strcmp_P(argv[1], PSTR("off"))) {
-    delay(500);
+    delay(LA_DELAY);
     _actuatorRelay1->turnRelayOff();
-    delay(500);
+    delay(LA_DELAY);
     _actuatorRelay2->turnRelayOff();
   }
   _actuatorRelay1->probe();
@@ -376,9 +380,7 @@ ShellCommandRegister* cmdLA = ShellCommandClass(la, "Controls linear actuator vi
   //shell.println(*_actuatorRelay2);
 });
 
-void test() {
-  bool success = true;
-
+void btns() {
   Wire.begin();
   Log.noticeln(F("Wire initialzied"));
 
@@ -388,13 +390,13 @@ void test() {
 
   QwiicButton button1, button2;
 
-  button1.begin(0x6D);  // port 0x04
+  button1.begin(0x6C);  // port 0x04
   button2.begin(0x6C);  // port 0x05
 
-  //mux.setPort(0x04);
+  mux.setPort(0x04);
   Log.traceln(F("button1 (%X:%X) = %d"), button1.getI2Caddress(), mux.getPort(), button1.isPressed());
 
-  //mux.setPort(0x05);
+  mux.setPort(0x05);
   Log.traceln(F("button2 (%X:%X) = %d"), button2.getI2Caddress(), mux.getPort(), button2.isPressed());
 }
 
@@ -409,11 +411,77 @@ uint8_t fromHex(const char* s) {
   }
 }
 
-ShellCommandRegister* cmdi2c = ShellCommandClass(test, "runs i2c tests and tools [test|scan|progbtn <old> <new>]", {
+void relays() {
+  Log.noticeln(F("------------- Running Relay Test "));
+  Wire.begin();
+  Log.noticeln(F("Wire initialzied"));
+
+  Qwiic_Relay r1(ActuatorRelay1Addr), r2(ActuatorRelay2Addr);
+
+  r1.begin();
+  r2.begin();
+
+  Log.traceln(F("relay 1 = %X"), r1.getState());
+  Log.traceln(F("relay 2 = %X"), r2.getState());
+  Log.traceln(F("  Delay is %d ms"), LA_DELAY);
+
+  for (int i = 0; i < 5; i++) {
+
+    // extend
+    Log.traceln(F("Retract: relay 1 = %d, relay 2 = %d"), r1.getState(), r2.getState());
+    r2.turnRelayOff();
+    delay(LA_DELAY);
+    Log.traceln(F("  relay 2 should be OFF = %d"), r2.getState());
+
+    r1.turnRelayOn();
+    delay(LA_DELAY);
+    Log.traceln(F("  relay 1 should be ON = %d"), r1.getState());
+    Log.traceln(F("  waiting 1000ms."));
+    delay(1000);
+
+    // stop
+    Log.traceln(F("Stop: relay 1 = %d, relay 2 = %d"), r1.getState(), r2.getState());
+    r1.turnRelayOff();
+    delay(LA_DELAY);
+    Log.traceln(F("  relay 1 should be OFF = %d"), r1.getState());
+
+    r2.turnRelayOff();
+    delay(LA_DELAY);
+    Log.traceln(F("  relay 1 should be OFF = %d"), r2.getState());
+
+    // retract
+    Log.traceln(F("Extend: relay 1 = %d, relay 2 = %d"), r1.getState(), r2.getState());
+    r1.turnRelayOff();
+    delay(LA_DELAY);
+    Log.traceln(F("  relay 1 should be OFF = %d"), r1.getState());
+
+    r2.turnRelayOn();
+    delay(LA_DELAY);
+    Log.traceln(F("  relay 2 should be ON = %d"), r2.getState());
+    Log.traceln(F("  waiting 2000ms."));
+    delay(2000);
+
+    // stop
+    Log.traceln(F("Stop: relay 1 = %d, relay 2 = %d"), r1.getState(), r2.getState());
+    r1.turnRelayOff();
+    delay(LA_DELAY);
+    Log.traceln(F("  relay 1 should be OFF = %d"), r1.getState());
+
+    r2.turnRelayOff();
+    delay(LA_DELAY);
+    Log.traceln(F("  relay 1 should be OFF = %d"), r2.getState());
+  }
+}
+
+ShellCommandRegister* cmdi2c = ShellCommandClass(test, "runs i2c tests and tools [scan|btns|progbtn <old> <new>]", {
   Cmds.logCommand(command->name, argc, argv);
 
-  if (argc > 1 && !strcmp_P(argv[1], PSTR("test"))) {
-    test();
+  if (argc > 1 && !strcmp_P(argv[1], PSTR("relays"))) {
+    relays();
+  }
+
+  if (argc > 1 && !strcmp_P(argv[1], PSTR("btns"))) {
+    btns();
   }
 
   if (argc > 1 && !strcmp_P(argv[1], PSTR("scan"))) {
@@ -477,7 +545,6 @@ ShellCommandRegister* cmdi2c = ShellCommandClass(test, "runs i2c tests and tools
   }
 });
 
-
 /**
  * @brief good 'ole Arudinio setup()
  * 
@@ -501,7 +568,6 @@ void setup(void) {
 
   _timer = millis();
 }
-
 
 void loop() {
   // listen for and process REST commands from Ethernet
