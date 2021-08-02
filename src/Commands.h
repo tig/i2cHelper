@@ -17,7 +17,7 @@
 // P1AM
 #ifdef ARDUINO_ARCH_SAMD
 #define MAC_ADDRESS 0x90, 0xA2, 0xDA, 0x0E, 0xFE, 0x40
-#define STATIC_IP   192, 168, 1, 160
+#define STATIC_IP   169, 254, 0, 1
 #endif
 
 // MEGA2560

@@ -44,7 +44,10 @@ class Motor : public i2cDevice {
 
   virtual void setStatus(uint32_t status) {
     _statusString[0] = '\0';
-    _cachedStatus = status;
+    if (_cachedStatus != status) {
+      _cachedStatus = status;
+      notify();
+    }
   }
 
   /**
@@ -81,7 +84,11 @@ class Motor : public i2cDevice {
    * @param speed 
    */
   virtual void setSpeed(uint8_t speed) {
-    _cachedSpeed = speed;
+    if (_cachedSpeed != speed) {
+      _cachedSpeed = speed;
+      notify();
+    }
+
     if (!initialized()) {
       Log.errorln(F("ERROR: Motor::setSpeed() when not initialized."));
       return;
@@ -100,7 +107,11 @@ class Motor : public i2cDevice {
    * @param acceleration 0-255 rate of acceleration 
    */
   virtual void setAcceleration(uint8_t acceleration) {
-    _cachedAccel = acceleration;
+    if (_cachedAccel != acceleration) {
+      _cachedAccel = acceleration;
+      notify();
+    }
+
     if (!initialized()) {
       Log.errorln(F("ERROR: Motor::setAcceleration() when not initialized."));
       return;
@@ -121,7 +132,10 @@ class Motor : public i2cDevice {
 
   // supports simulation
   void setTemperature(uint32_t temp) {
-    _cachedTemperature = temp;
+    if (_cachedTemperature != temp) {
+      _cachedTemperature = temp;
+      //notify();
+    }
   }
 
   virtual uint32_t current() {
@@ -130,7 +144,10 @@ class Motor : public i2cDevice {
 
   // supports simulation
   void setCurrent(uint32_t current) {
-    _cachedCurrent = current;
+    if (_cachedCurrent != current) {
+      _cachedCurrent = current;
+      //notify();
+    }
   }
 
   /**
@@ -145,6 +162,7 @@ class Motor : public i2cDevice {
 #ifdef SIMULATION
     digitalWrite(address(), LOW);
 #endif
+    notify();
   }
 
   /**
@@ -179,7 +197,10 @@ class Motor : public i2cDevice {
 
   // for simulation
   void setDirection(uint8_t dir) {
-    _cachedDirection = dir;
+    if (_cachedDirection != dir) {
+      _cachedDirection = dir;
+      notify();
+    }
   }
 
   /**

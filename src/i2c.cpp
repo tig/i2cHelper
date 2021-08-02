@@ -34,6 +34,10 @@ bool i2cDevice::begin() {
   return _initialized;
 }
 
+void i2cDevice::probe() {
+
+}
+
 bool i2cDevice::setPort() {
   //Log.trace(F("(setPort() %S on (%X:%X))"), name(), address(), muxPort());
   if (!initialized()) {

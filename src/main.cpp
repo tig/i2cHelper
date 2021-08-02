@@ -597,18 +597,29 @@ void setup(void) {
     Log.errorln("NOTE: Bus and devices are not initialzied. Use `init all` command.");
   }
 
-  _actuatorRelay1->registerStateChange([]() {
-    Log.noticeln(F("State Changed: %p"), _actuatorRelay1);
-  });
+  // _actuatorRelay1->registerStateChange([]() {
+  //   Log.noticeln(F("State Changed: %p"), _actuatorRelay1);
+  // });
 
-  _esp32Button->registerStateChange([]() {
-    Log.noticeln(F("%p"), _esp32Button);
-    for (uint16_t i = 0; i < sizeof(Cmds._telnetShell) / sizeof(Shell); i++) {
-      if (Cmds._shellClient[i] != nullptr) {
-        Cmds._telnetShell[i].println(*_esp32Button);
+  // _esp32Button->registerStateChange([]() {
+  //   Log.noticeln(F("%p"), _esp32Button);
+  //   for (uint16_t i = 0; i < sizeof(Cmds._telnetShell) / sizeof(Shell); i++) {
+  //     if (Cmds._shellClient[i] != nullptr) {
+  //       Cmds._telnetShell[i].println(*_esp32Button);
+  //     }
+  //   }
+  // });
+  //my_devices, sizeof(my_devices) / sizeof(i2cDevice*)
+  for (uint8_t i = 0; i < sizeof(my_devices) / sizeof(i2cDevice*); i++) {
+    my_devices[i]->registerStateChange([](i2cDevice* device) {
+      //Log.noticeln(F("%p"), device);
+      for (uint16_t i = 0; i < sizeof(Cmds._telnetShell) / sizeof(Shell); i++) {
+        if (Cmds._shellClient[i] != nullptr) {
+          Cmds._telnetShell[i].println(*device);
+        }
       }
-    }
-  });
+    });
+  }
 
   _timer = millis();
 }
@@ -622,45 +633,11 @@ void loop() {
     _timer = millis();
     //_logStateInLoopFor--;
 
-    //   _motorController->probe();
-    //   Log.noticeln(F("%p"), *_motorController);
-    //   shell.println(*_motorController);
-
-    //   _forwardDistanceSensor->distance();
-    //   Log.noticeln(F("%p"), *_forwardDistanceSensor);
-    //   shell.println(*_forwardDistanceSensor);
-
-    //   _rearwardDistanceSensor->distance();
-    //   Log.noticeln(F("%p"), *_rearwardDistanceSensor);
-    //   shell.println(*_rearwardDistanceSensor);
-
-    //   _forwardEndRangeSensor->isContacted();
-    //   Log.noticeln(F("%p"), *_forwardEndRangeSensor);
-    //   shell.println(*_forwardEndRangeSensor);
-
-    //   _rearwardEndRangeSensor->isContacted();
-    //   Log.noticeln(F("%p"), *_rearwardEndRangeSensor);
-    //   shell.println(*_rearwardEndRangeSensor);
-
-    //   Log.noticeln(F("%p"), *_openedSensor);
-    //   shell.println(*_openedSensor);
-
-    //   Log.noticeln(F("%p"), *_closedSensor);
-    //   shell.println(*_closedSensor);
-
-    //   _actuatorRelay1->state();
-    //   Log.noticeln(F("%p"), *_actuatorRelay1);
-    //   shell.println(*_actuatorRelay1);
-
-    //   _actuatorRelay2->state();
-    //   Log.noticeln(F("%p"), *_actuatorRelay2);
-    //   shell.println(*_actuatorRelay2);
-
-    //   _resurrectionRelay->state();
-    //   Log.noticeln(F("%p"), *_resurrectionRelay);
-    //   shell.println(*_resurrectionRelay);
-
-    _esp32Button->probe();
+     for (uint8_t i = 0; i < sizeof(my_devices) / sizeof(i2cDevice*); i++) {
+       if (my_devices[i]->initialized()){
+        my_devices[i]->probe();
+       }
+     }
   }
 }
 

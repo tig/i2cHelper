@@ -25,7 +25,7 @@ class ContactSensor : public i2cDevice {
       bool b = digitalRead(BUTTON_PIN) == LOW;
       setContact(b);
     }
-    return true;
+    return i2cDevice::begin();
   }
 
   virtual bool isContacted() {
@@ -34,37 +34,32 @@ class ContactSensor : public i2cDevice {
 
     if (address() == 0xFF) {
       bool b = digitalRead(BUTTON_PIN) == LOW;
-      if (b != _contact) {
-        _contact = b;
-        notify();
-      }
+      setContact(b);
     }
     return _contact;
-  };
+  }
 
   virtual void probe() override {
     if (address() == 0xFF) {
-      bool b = digitalRead(BUTTON_PIN) == LOW;
-      if (b != _contact) {
-        _contact = b;
-        notify();
-      }
+      isContacted();
     }
   }
 
-  // for testing only
   virtual void setContact(bool contact) {
     setPort();
-    _contact = contact;
-  };
+    if (_contact != contact) {
+      _contact = contact;
+      notify();
+    }
+  }
 
   virtual size_t printTo(Print& p) const override {
     int n = i2cDevice::printTo(p);
     return n += p.print(_contact ? F("closed") : F("opened"));
-  };
+  }
 
- protected:
-  bool _contact;
+ private:
+  bool _contact = false;
 };
 
 /**
@@ -81,7 +76,7 @@ class QwiicContactSensor : public ContactSensor {
     if (success) {
       success = _button.begin(address());
 
-      _contact = _button.isPressed();
+      setContact(_button.isPressed());
       //Log.trace(F("  isContacted = %T, FirmwareVersion = %d, I2Caddress = %X"), _contact, _button.getFirmwareVersion(), _button.getI2Caddress());
       if (!success) {
         Log.errorln(F("  ERROR: %S setup failed. isConnected = %T, DeviceID() = %X"), name(), _button.isConnected(), _button.deviceID());
@@ -89,23 +84,21 @@ class QwiicContactSensor : public ContactSensor {
       Log.trace(F(" [%p]"), this);
     }
     return success;
-  };
+  }
+
+  virtual void probe() override {
+    isContacted();
+  }
 
   virtual bool isContacted() override {
-    ContactSensor::isContacted();
-
-    _contact = _button.isPressed();
-    //Log.traceln(F("QwiicContactSensor::isContacted = %T"), _contact);
-    return _contact;
-  };
+    bool contact = _button.isPressed();
+    ContactSensor::setContact(contact);
+    return contact;
+  }
 
   void setContact(bool contact) override {
     ContactSensor::setContact(contact);
     digitalWrite(address(), contact);
-  };
-
-  virtual void probe() {
-    isContacted();
   }
 
  private:
@@ -124,9 +117,11 @@ class DistanceSensor : public i2cDevice {
     return _cachedDistance;
   }
 
-  // for simulation
   virtual void setDistance(uint16_t distance) {
-    _cachedDistance = distance;
+    if (_cachedDistance != distance) {
+      _cachedDistance = distance;
+      notify();
+    }
   }
 
   virtual size_t printTo(Print& p) const override {
@@ -156,6 +151,7 @@ class VL53L1XDistanceSensor : public DistanceSensor {
   const uint8_t SENSOR_PERIOD = 180;         // How fast to sample - min is 100, but that can result in bad readings some times
   const uint8_t SENSOR_TIMING_BUDGET = 100;  // Predefined values = 15, 20, 33, 50, 100(default), 200, 500.
   const uint16_t SENSOR_WAIT_PERIOD = 1000;  // Num msec to wait until giving up on checkforDataReady
+  const uint8_t SENSOR_MIN_MOVEMENT = 5;     // 5 mm
 
   using DistanceSensor::DistanceSensor;
 
@@ -212,6 +208,19 @@ class VL53L1XDistanceSensor : public DistanceSensor {
     return success;
   };
 
+  virtual void setDistance(uint16_t distance) {
+    uint16_t delta = 0;
+    if (DistanceSensor::distance() > distance) delta = DistanceSensor::distance() - distance;
+    if (DistanceSensor::distance() < distance) delta = distance - DistanceSensor::distance();
+    if (delta > SENSOR_MIN_MOVEMENT) {
+      DistanceSensor::setDistance(distance);
+    }
+  }
+
+  virtual void probe() override {
+    distance();
+  }
+
   virtual uint16_t distance() override {
     if (setPort()) {
       _sensor->startOneshotRanging();
@@ -223,7 +232,7 @@ class VL53L1XDistanceSensor : public DistanceSensor {
           break;
         }
       }
-      DistanceSensor::setDistance(_sensor->getDistance());
+      setDistance(_sensor->getDistance());
       return DistanceSensor::distance();
     }
     return 0;

@@ -58,7 +58,7 @@ class i2cDevice : public Printable {
    * @return false 
    */
   virtual bool begin();
-  virtual void probe() { notify(); }
+  virtual void probe();
   virtual bool setPort();
 
   uint8_t address() const;
@@ -73,21 +73,21 @@ class i2cDevice : public Printable {
   bool initialized();
   virtual size_t printTo(Print& p) const;
 
-  template<class T> void registerStateChange(T* const object, void(T::* const mf)())
+  template<class T> void registerStateChange(T* const object, void(T::* const func)(i2cDevice* device))
   {
     using namespace std::placeholders; 
-    callbacks_.emplace_back(std::bind(mf, object));
+    callbacks_.emplace_back(std::bind(func, object, _1));
   }
 
-  void registerStateChange(void(* const fun)()) 
+  void registerStateChange(void(* const func)(i2cDevice* device)) 
   {
-    callbacks_.emplace_back(fun);
+    callbacks_.emplace_back(func);
   }
 
   void notify() 
   {
     for (const auto& cb : callbacks_)
-      cb();
+      cb(this);
   }
 
  private:
@@ -97,7 +97,7 @@ class i2cDevice : public Printable {
   QWIICMUX* _mux;
   bool _isMux;
   bool _found;
-  std::vector<std::function<void()>> callbacks_;
+  std::vector<std::function<void(i2cDevice* device)>> callbacks_;
   bool _initialized;
 };
 

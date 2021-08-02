@@ -121,7 +121,7 @@ bool Commands::beginServer(const char *ssid, const char *pwd) {
 
     if (Ethernet.linkStatus() == LinkON) {
       // Maintain the DHCP lease over time.
-      Ethernet.maintain();
+      //Ethernet.maintain();
     }
 #endif
 
@@ -139,7 +139,7 @@ bool Commands::beginServer(const char *ssid, const char *pwd) {
     WiFiClient newClient = _shellServer.available();
 #endif
 #ifdef USE_ETHERNET
-    EthernetClient newClient = _shellServer.available();
+    EthernetClient newClient = _shellServer.accept();
 #endif
     if (newClient.connected()) {
       uint16_t client;
