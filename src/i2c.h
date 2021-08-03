@@ -25,14 +25,18 @@ class EventHandler {
  */
 class i2cDevice : public Printable {
  public:
-  i2cDevice(uint8_t address, uint8_t muxPort, const __FlashStringHelper* name, QWIICMUX* mux, bool isMux = false)
+  i2cDevice(uint8_t address, uint8_t muxPort, uint8_t muxAddress, const __FlashStringHelper* name, bool isMux = false)
       : _address(address),
         _muxPort(muxPort),
+        _muxAddress(muxAddress),
         _name(name),
-        _mux(mux),
         _isMux(isMux),
-        //_callbacks(nullptr),
-        _initialized(false) {}
+        _mux(nullptr),
+        _initialized(false) {
+          if (isMux || muxAddress != 0xFF) {
+            _mux = new QWIICMUX();
+          }
+        }
 
   /**
    * @brief sets up the device
@@ -76,9 +80,10 @@ class i2cDevice : public Printable {
  private:
   uint8_t _address;
   uint8_t _muxPort;  // 0xFF if not on mux
+  uint8_t _muxAddress; // 0xFF if not on mux
   const __FlashStringHelper* _name;
-  QWIICMUX* _mux;
   bool _isMux;
+  QWIICMUX* _mux;
   bool _found;
   std::vector<std::function<void(i2cDevice* device)>> _callbacks;
   bool _initialized;
@@ -86,9 +91,6 @@ class i2cDevice : public Printable {
 
 class i2c {
  public:
-  //i2cDevice** _devices;
-  //int8_t _numDevices;
-
   std::vector<i2cDevice*> _devices;
 
   /**

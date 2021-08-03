@@ -59,19 +59,19 @@ enum myi2cAddresses
   ResurrectionRelayAddr = 0x1A
 };
 
-i2cDevice* _mux = new i2cDevice(myi2cAddresses::MuxAddr, 0xFF, (__FlashStringHelper*)PSTR("Qwiic Mux"), new QWIICMUX(), true);
-QwiicContactSensor* _openedSensor = new QwiicContactSensor(myi2cAddresses::OpenedSensorAddr, 0xFF, (__FlashStringHelper*)PSTR("Opened Sensor"), nullptr);
-QwiicContactSensor* _closedSensor = new QwiicContactSensor(myi2cAddresses::ClosedSensorAddr, 0xFF, (__FlashStringHelper*)PSTR("Closed Sensor"), nullptr);
-QwiicRelay* _actuatorRelay1 = new QwiicRelay(myi2cAddresses::ActuatorRelay1Addr, 0xFF, (__FlashStringHelper*)PSTR("Actuator Relay1"), nullptr);
-QwiicRelay* _actuatorRelay2 = new QwiicRelay(myi2cAddresses::ActuatorRelay2Addr, 0xFF, (__FlashStringHelper*)PSTR("Actuator Relay2"), nullptr);
-AdafruitMotorController* _motorController = new AdafruitMotorController(myi2cAddresses::MotorControllerAddr, 0xFF, (__FlashStringHelper*)PSTR("Motor Controller"), nullptr);
-VL53L1XDistanceSensor* _forwardDistanceSensor = new VL53L1XDistanceSensor(myi2cAddresses::ForwardDistanceSensorAddr, 0x04, (__FlashStringHelper*)PSTR("Forward Distance Sensor"), _mux->mux());
-VL53L1XDistanceSensor* _rearwardDistanceSensor = new VL53L1XDistanceSensor(myi2cAddresses::RearwardDistanceSensorAddr, 0x05, (__FlashStringHelper*)PSTR("Rearward Distance Sensor"), _mux->mux());
-QwiicContactSensor* _forwardEndRangeSensor = new QwiicContactSensor(myi2cAddresses::ForwardEndRangeSensorAddr, 0x04, (__FlashStringHelper*)PSTR("Forward End-range Sensor"), _mux->mux());
-QwiicContactSensor* _rearwardEndRangeSensor = new QwiicContactSensor(myi2cAddresses::RearwardEndRangeSensorAddr, 0x05, (__FlashStringHelper*)PSTR("Rearward End-range Sensor"), _mux->mux());
-QwiicRelay* _resurrectionRelay = new QwiicRelay(myi2cAddresses::ResurrectionRelayAddr, 0xFF, (__FlashStringHelper*)PSTR("Resurrection Relay"), nullptr);
+i2cDevice* _mux = new i2cDevice(myi2cAddresses::MuxAddr, 0xFF, myi2cAddresses::MuxAddr, (__FlashStringHelper*)PSTR("Qwiic Mux"), true);
+QwiicContactSensor* _openedSensor = new QwiicContactSensor(myi2cAddresses::OpenedSensorAddr, 0xFF, 0xFF, (__FlashStringHelper*)PSTR("Opened Sensor"));
+QwiicContactSensor* _closedSensor = new QwiicContactSensor(myi2cAddresses::ClosedSensorAddr, 0xFF, 0xFF, (__FlashStringHelper*)PSTR("Closed Sensor"));
+QwiicRelay* _actuatorRelay1 = new QwiicRelay(myi2cAddresses::ActuatorRelay1Addr, 0xFF, 0xFF, (__FlashStringHelper*)PSTR("Actuator Relay1"));
+QwiicRelay* _actuatorRelay2 = new QwiicRelay(myi2cAddresses::ActuatorRelay2Addr, 0xFF, 0xFF, (__FlashStringHelper*)PSTR("Actuator Relay2"));
+AdafruitMotorController* _motorController = new AdafruitMotorController(myi2cAddresses::MotorControllerAddr, 0xFF, 0xFF, (__FlashStringHelper*)PSTR("Motor Controller"));
+VL53L1XDistanceSensor* _forwardDistanceSensor = new VL53L1XDistanceSensor(myi2cAddresses::ForwardDistanceSensorAddr, 0x04, myi2cAddresses::MuxAddr, (__FlashStringHelper*)PSTR("Forward Distance Sensor"));
+VL53L1XDistanceSensor* _rearwardDistanceSensor = new VL53L1XDistanceSensor(myi2cAddresses::RearwardDistanceSensorAddr, 0x05, myi2cAddresses::MuxAddr, (__FlashStringHelper*)PSTR("Rearward Distance Sensor"));
+QwiicContactSensor* _forwardEndRangeSensor = new QwiicContactSensor(myi2cAddresses::ForwardEndRangeSensorAddr, 0x04, myi2cAddresses::MuxAddr, (__FlashStringHelper*)PSTR("Forward End-range Sensor"));
+QwiicContactSensor* _rearwardEndRangeSensor = new QwiicContactSensor(myi2cAddresses::RearwardEndRangeSensorAddr, 0x05, myi2cAddresses::MuxAddr, (__FlashStringHelper*)PSTR("Rearward End-range Sensor"));
+QwiicRelay* _resurrectionRelay = new QwiicRelay(myi2cAddresses::ResurrectionRelayAddr, 0xFF, 0xFF, (__FlashStringHelper*)PSTR("Resurrection Relay"));
 
-ContactSensor* _esp32Button = new ContactSensor(0xFF, 0xFF, (__FlashStringHelper*)PSTR("ESP32 Button"), nullptr);
+ContactSensor* _esp32Button = new ContactSensor(0xFF, 0xFF, 0xFF, (__FlashStringHelper*)PSTR("ESP32 Button"));
 
 /**
  * @brief This array is passed to the i2c class at begin; it uses it to track all devices.
@@ -613,11 +613,11 @@ void loop() {
     _timer = millis();
     //_logStateInLoopFor--;
 
-     for (uint8_t i = 0; i < sizeof(my_devices) / sizeof(i2cDevice*); i++) {
-       if (my_devices[i]->initialized()){
+    for (uint8_t i = 0; i < sizeof(my_devices) / sizeof(i2cDevice*); i++) {
+      if (my_devices[i]->initialized()) {
         my_devices[i]->probe();
-       }
-     }
+      }
+    }
   }
 }
 

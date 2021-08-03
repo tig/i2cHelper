@@ -19,9 +19,10 @@ static const char errorStr[] PROGMEM = "n/a";
 bool i2cDevice::begin() {
   //Log.traceln(F("i2cDevice::begin - %S - (%X:%X) isMux = %T, mux &%X"), name(), address(), muxPort(), isMux(), mux());
 
-  if (isMux() || muxPort() != 0xFF) assert(_mux);
-  if (mux() != nullptr && isMux()) {
-    //Log.trace(F("QWIICMUX::begin..."));
+  if (isMux() || muxPort() != 0xFF) assert(mux());
+
+  if (mux() != nullptr) {
+    // BUGBUG: should really pass address() to begin()
     if (!mux()->begin()) {
       Log.errorln(F("  ERROR: %S QWIICMUX begin failed for (%X:%X) mux addr: %X"), name(), address(), muxPort(), mux()->getAddress());
       //return false;
