@@ -218,24 +218,17 @@ class VL53L1XDistanceSensor : public DistanceSensor {
   }
 
   virtual void probe() override {
-    distance();
-  }
-
-  virtual uint16_t distance() override {
     if (setPort()) {
       _sensor->startOneshotRanging();
       for (uint16_t msecs = 0; !_sensor->checkForDataReady() && msecs <= SENSOR_WAIT_PERIOD; msecs++) {
         delay(1);
         if (msecs == SENSOR_WAIT_PERIOD) {
-          Log.errorln(F("ERROR: getDistance() - Sensor failed to make data ready."));
-          return 0;
-          break;
+          Log.errorln(F("ERROR: VL53L1XDistanceSensor::probe() - Sensor failed to make data ready."));
+          return;
         }
       }
       setDistance(_sensor->getDistance());
-      return DistanceSensor::distance();
     }
-    return 0;
   }
 
   SFEVL53L1X* sensor() const { return _sensor; }
