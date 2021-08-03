@@ -35,7 +35,6 @@ bool i2cDevice::begin() {
 }
 
 void i2cDevice::probe() {
-
 }
 
 bool i2cDevice::setPort() {
@@ -112,8 +111,9 @@ i2c Bus = i2c::getInstance();
 bool i2c::begin(i2cDevice** devices, size_t num) {
   bool success = true;
   _initialized = false;
-  _devices = devices;
-  _numDevices = num;
+  for (size_t i = 0 ; i < num ; i++) {
+    _devices.emplace_back(devices[i]);
+  }
 
 #if defined(ARDUINO_ARCH_ESP32)
   if (!Wire.begin()) {
@@ -126,8 +126,8 @@ bool i2c::begin(i2cDevice** devices, size_t num) {
   Log.noticeln(F("Wire initialzied"));
 #endif
 
-  Log.traceln(F("Looking for these %d devices"), _numDevices);
-  for (uint8_t i = 0; i < _numDevices; i++) {
+  Log.traceln(F("Looking for these %d devices"), _devices.size());
+  for (uint8_t i = 0; i < _devices.size(); i++) {
     Log.trace(F("Address %X - %S --"), _devices[i]->address(), _devices[i]->name());
     _devices[i]->setFound(false);
     if (_devices[i]->isMux()) {
@@ -147,6 +147,10 @@ bool i2c::begin(i2cDevice** devices, size_t num) {
   return _initialized = success;
 }
 
+void i2c::add(i2cDevice* device) {
+  _devices.emplace_back(device);
+}
+
 /**
  * @brief Given an I2C address, return the i2cDevice that matches from the array of devices
  * 
@@ -155,7 +159,7 @@ bool i2c::begin(i2cDevice** devices, size_t num) {
  */
 i2cDevice* i2c::findDevice(uint8_t address, uint8_t port) {
   if (!initialized()) return nullptr;
-  for (uint8_t i = 0; i < _numDevices; i++) {
+  for (uint8_t i = 0; i < _devices.size(); i++) {
     if (_devices[i]->address() == address && _devices[i]->muxPort() == port) {
       return _devices[i];
     }
@@ -180,12 +184,12 @@ bool i2c::probeAll(int delayTime) {
   bool success = true;
 
   // Only scan for muxes that we know are there to save time
-  for (uint8_t i = 0; i < _numDevices; i++) {
+  for (uint8_t i = 0; i < _devices.size(); i++) {
     _devices[i]->setFound(false);
   }
 
   // Log.notice(F("I2C devices found: "));
-  for (uint8_t i = 0; i < _numDevices; i++) {
+  for (uint8_t i = 0; i < _devices.size(); i++) {
     if (!_devices[i]->isMux() && _devices[i]->mux() != nullptr) {
       //Log.trace(F("!isMux - setting port %S"), _devices[i]->name());
       if (!_devices[i]->setPort()) {
@@ -199,7 +203,7 @@ bool i2c::probeAll(int delayTime) {
 
   Log.noticeln(F(""));
 
-  for (uint8_t i = 0; i < _numDevices; i++) {
+  for (uint8_t i = 0; i < _devices.size(); i++) {
     if (_devices[i]->found() == false) {
       Log.errorln(F("  ERROR: %S (%X) was not found"), _devices[i]->name(), _devices[i]->address());
       success = false;

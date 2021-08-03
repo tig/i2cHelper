@@ -59,26 +59,6 @@ enum myi2cAddresses
   ResurrectionRelayAddr = 0x1A
 };
 
-/**
- * @brief the order of these must match the order of the devices in my_devices!
- * TODO: build in a check.
- * 
- */
-enum myi2cDevices
-{
-  Mux,
-  OpenedSensor,
-  ClosedSensor,
-  ActuatorRelay1,
-  ActuatorRelay2,
-  MotorController,
-  ForwardDistanceSensor,
-  RearwardDistanceSensor,
-  ForwardEndRangeSensor,
-  RearwardEndRangeSensor,
-  ResurrectionRelay
-};
-
 i2cDevice* _mux = new i2cDevice(myi2cAddresses::MuxAddr, 0xFF, (__FlashStringHelper*)PSTR("Qwiic Mux"), new QWIICMUX(), true);
 QwiicContactSensor* _openedSensor = new QwiicContactSensor(myi2cAddresses::OpenedSensorAddr, 0xFF, (__FlashStringHelper*)PSTR("Opened Sensor"), nullptr);
 QwiicContactSensor* _closedSensor = new QwiicContactSensor(myi2cAddresses::ClosedSensorAddr, 0xFF, (__FlashStringHelper*)PSTR("Closed Sensor"), nullptr);

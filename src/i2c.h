@@ -8,30 +8,13 @@
 
 #include <functional>
 #include <vector>
+using namespace std;
 
 class i2cDevice;
-
-// /**
-//  * \brief Function that gets called when the state of a i2cDevice changes
-//  *
-//  * \param device The i2cDevice
-//  * \param propertyName The name of the property that changed
-//  * \param newValue The new value
-//  */
-// typedef void (*StateChanged)(i2cDevice& device,
-//     const __FlashStringHelper* propertyName,
-//     void* newValue);
-
-
-
-using namespace std;
 
 class EventHandler {
     public:
         void addHandler(std::function<void(int)> callback) {
-            //printf("\nHandler added...");
-            // Let's pretend an event just occured
-            //callback(1);
         }
 };
 
@@ -48,7 +31,7 @@ class i2cDevice : public Printable {
         _name(name),
         _mux(mux),
         _isMux(isMux),
-        //callbacks_(nullptr),
+        //_callbacks(nullptr),
         _initialized(false) {}
 
   /**
@@ -76,17 +59,17 @@ class i2cDevice : public Printable {
   template<class T> void registerStateChange(T* const object, void(T::* const func)(i2cDevice* device))
   {
     using namespace std::placeholders; 
-    callbacks_.emplace_back(std::bind(func, object, _1));
+    _callbacks.emplace_back(std::bind(func, object, _1));
   }
 
   void registerStateChange(void(* const func)(i2cDevice* device)) 
   {
-    callbacks_.emplace_back(func);
+    _callbacks.emplace_back(func);
   }
 
   void notify() 
   {
-    for (const auto& cb : callbacks_)
+    for (const auto& cb : _callbacks)
       cb(this);
   }
 
@@ -97,21 +80,16 @@ class i2cDevice : public Printable {
   QWIICMUX* _mux;
   bool _isMux;
   bool _found;
-  std::vector<std::function<void(i2cDevice* device)>> callbacks_;
+  std::vector<std::function<void(i2cDevice* device)>> _callbacks;
   bool _initialized;
 };
 
-// class i2cMux : public i2cDevice {
-//   using i2cDevice::i2cDevice;
-
-//  private:
-//   QWIICMUX* _mux;
-// };
-
 class i2c {
  public:
-  i2cDevice** _devices;
-  int8_t _numDevices;
+  //i2cDevice** _devices;
+  //int8_t _numDevices;
+
+  std::vector<i2cDevice*> _devices;
 
   /**
    * @brief sets up the bus 
@@ -122,6 +100,8 @@ class i2c {
    * @return false 
    */
   bool begin(i2cDevice** devices, size_t num);
+
+  void add(i2cDevice* device);
 
   bool enableMuxPort(byte mux, byte portNumber);
 
@@ -164,7 +144,7 @@ class i2c {
 
  private:
   // Prohibiting External Constructions
-  i2c() : _devices(nullptr), _numDevices(0), _initialized(false){};
+  i2c() : _devices(), _initialized(false){};
 
   // C++ 11
   // =======
