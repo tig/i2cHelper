@@ -5,9 +5,6 @@
 
 //#include "main.h"
 #include "Commands.h"
-#include "i2c.h"
-#include "Sensors.h"
-#include "Relay.h"
 
 void Commands::logCommand(const __FlashStringHelper *name, int argc, const ShellArguments &argv) {
   Log.trace(F(">>>>> Command: %S"), name);
