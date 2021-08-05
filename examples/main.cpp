@@ -71,7 +71,9 @@ QwiicContactSensor* _forwardEndRangeSensor = new QwiicContactSensor(myi2cAddress
 QwiicContactSensor* _rearwardEndRangeSensor = new QwiicContactSensor(myi2cAddresses::RearwardEndRangeSensorAddr, 0x05, myi2cAddresses::MuxAddr, (__FlashStringHelper*)PSTR("Rearward End-range Sensor"));
 QwiicRelay* _resurrectionRelay = new QwiicRelay(myi2cAddresses::ResurrectionRelayAddr, 0xFF, 0xFF, (__FlashStringHelper*)PSTR("Resurrection Relay"));
 
+#if defined(ARDUINO_ARCH_ESP32)
 ContactSensor* _esp32Button = new ContactSensor(0xFF, 0xFF, 0xFF, (__FlashStringHelper*)PSTR("ESP32 Button"));
+#endif
 
 /**
  * @brief This array is passed to the i2c class at begin; it uses it to track all devices.
@@ -89,7 +91,11 @@ i2cDevice* my_devices[] = {
     _forwardEndRangeSensor,
     _rearwardEndRangeSensor,
     _resurrectionRelay,
+#if defined(ARDUINO_ARCH_ESP32)
     _esp32Button};
+#else
+  };
+#endif
 
 unsigned long DELAY_TIME = 250;
 unsigned long _timer = 0;
@@ -279,11 +285,13 @@ ShellCommandRegister* cmdGet = ShellCommandClass(get, "Gets state - [all|i2c|ip|
     Log.noticeln(F("%p"), *_resurrectionRelay);
     shell.println(*_resurrectionRelay);
   }
+#if defined(ARDUINO_ARCH_ESP32)
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("btn")))) {
     _esp32Button->probe();
     Log.noticeln(F("%p"), *_esp32Button);
     shell.println(*_esp32Button);
   }
+#endif  
 });
 
 ShellCommandRegister* cmdRelay = ShellCommandClass(relay, "Controls a relay - [1|2|res] ([on|off|toggle])", {
@@ -577,19 +585,6 @@ void setup(void) {
     Log.errorln("NOTE: Bus and devices are not initialzied. Use `init all` command.");
   }
 
-  // _actuatorRelay1->registerStateChange([]() {
-  //   Log.noticeln(F("State Changed: %p"), _actuatorRelay1);
-  // });
-
-  // _esp32Button->registerStateChange([]() {
-  //   Log.noticeln(F("%p"), _esp32Button);
-  //   for (uint16_t i = 0; i < sizeof(Cmds._telnetShell) / sizeof(Shell); i++) {
-  //     if (Cmds._shellClient[i] != nullptr) {
-  //       Cmds._telnetShell[i].println(*_esp32Button);
-  //     }
-  //   }
-  // });
-  //my_devices, sizeof(my_devices) / sizeof(i2cDevice*)
   for (uint8_t i = 0; i < sizeof(my_devices) / sizeof(i2cDevice*); i++) {
     my_devices[i]->registerStateChange([](i2cDevice* device) {
       //Log.noticeln(F("%p"), device);

@@ -58,6 +58,7 @@ class i2cDevice : public Printable {
   bool found();
   void setFound(bool found);
   bool initialized();
+  void setInitialized(bool init);
   virtual size_t printTo(Print& p) const;
 
   template<class T> void registerStateChange(T* const object, void(T::* const func)(i2cDevice* device))

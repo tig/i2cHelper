@@ -25,7 +25,7 @@ bool i2cDevice::begin() {
     // BUGBUG: should really pass address() to begin()
     if (!mux()->begin()) {
       Log.errorln(F("  ERROR: %S QWIICMUX begin failed for (%X:%X) mux addr: %X"), name(), address(), muxPort(), mux()->getAddress());
-      //return false;
+      return false;
     }
     //Log.trace(F("back from QWIICMUX::begin."));
   }
@@ -83,7 +83,7 @@ bool i2cDevice::isMux() const { return _isMux; }
 bool i2cDevice::found() { return _found; }
 void i2cDevice::setFound(bool found) { _found = found; }
 bool i2cDevice::initialized() { return _initialized; }
-
+void i2cDevice::setInitialized(bool init) { _initialized = init; }
 /**
    * @brief `Printable::printTo` - prints the current motor state (direction & speed)
    *
@@ -141,7 +141,7 @@ bool i2c::begin(i2cDevice** devices, size_t num) {
     if (_devices[i]->begin()) {
       Log.traceln(F(""));  //Log.traceln(F(" -- initialized"));
     } else {
-      Log.errorln(F("\n  ERROR: Device at %X failed to init"), _devices[i]->address());
+      Log.errorln(F("\n  ERROR: Device %S at %X failed to begin"), _devices[i]->name(), _devices[i]->address());
       success = false;
     }
   }

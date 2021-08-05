@@ -157,8 +157,8 @@ class VL53L1XDistanceSensor : public DistanceSensor {
 
   virtual bool begin() override {
     // Call base which sets up mux if needed
-    bool success = i2cDevice::begin();
-    if (success) {
+    i2cDevice::begin();
+    if (initialized()) {
       if (_sensor != nullptr) {
         delete _sensor;
       }
@@ -167,45 +167,40 @@ class VL53L1XDistanceSensor : public DistanceSensor {
       uint16_t result;
       if ((result = (uint16_t)_sensor->begin()) != 0)  // Begin returns 0 on a good init
       {
-        for (uint16_t msecs = 0; !_sensor->checkForDataReady() && msecs <= SENSOR_WAIT_PERIOD; msecs++) {
-          delay(1);
-          if (msecs == SENSOR_WAIT_PERIOD) {
-            Log.errorln(F("    ERROR: Sensor failed to make data ready."));
-            success = false;
-            break;
-          }
-        }
-        Log.errorln(F("    ERROR: Sensor failed to begin. Result: %d. Please check wiring."), result);
+        Log.errorln(F("\n    ERROR: Distance Sensor failed to begin. Result: %X. Please check wiring."), result);
         Log.traceln(F("          checkID: %d"), (uint16_t)_sensor->checkID());
         VL53L1X_Version_t ver = _sensor->getSoftwareVersion();
         Log.traceln(F("  softwareVersion: %d.%d.%d.%d"), ver.major, ver.minor, ver.revision, ver.build);
         Log.traceln(F("       I2CAddress: %X"), (uint16_t)_sensor->getI2CAddress());
         Log.traceln(F("      getSensorID: %X"), (uint16_t)_sensor->getSensorID());
-
-        success = false;
-      } else {
-        //Log.traceln(F("       I2CAddress: %X"), (uint16_t)_sensor->getI2CAddress());
-        _sensor->setIntermeasurementPeriod(SENSOR_PERIOD);
-        _sensor->setDistanceModeLong();
-        _sensor->setTimingBudgetInMs(SENSOR_TIMING_BUDGET);
-
-        // Set the initial distance
-        _sensor->startOneshotRanging();
-        for (uint16_t msecs = 0; !_sensor->checkForDataReady() && msecs <= SENSOR_WAIT_PERIOD; msecs++) {
-          delay(1);
-          if (msecs == SENSOR_WAIT_PERIOD) {
-            Log.errorln(F("    ERROR: Sensor failed to make data ready."));
-            success = false;
-            break;
-          }
-        }
-        setDistance(_sensor->getDistance());
-        Log.trace(F(" [%p]"), this);
+        setInitialized(false);
       }
     } else {
-      Log.errorln(F("    ERROR: VL53L1XDistanceSensor::begin() failed"));
+      Log.errorln(F("    ERROR: i2cDevice::begin() failed"));
     }
-    return success;
+
+    if (initialized() == true) {
+      // Everything should be working. Set initial parameters and get
+      // current distance.
+      _sensor->setIntermeasurementPeriod(SENSOR_PERIOD);
+      _sensor->setDistanceModeLong();
+      _sensor->setTimingBudgetInMs(SENSOR_TIMING_BUDGET);
+
+      // Set the initial distance
+      _sensor->startOneshotRanging();
+      for (uint16_t msecs = 0; !_sensor->checkForDataReady() && msecs <= SENSOR_WAIT_PERIOD; msecs++) {
+        delay(1);
+        if (msecs == SENSOR_WAIT_PERIOD) {
+          Log.errorln(F("    ERROR: Distance Sensor failed to make data ready."));
+          setInitialized(false);
+          break;
+        }
+      }
+      setDistance(_sensor->getDistance());
+      Log.trace(F(" [%p]"), this);
+    }
+
+    return initialized();
   };
 
   virtual void setDistance(uint16_t distance) {
@@ -223,7 +218,7 @@ class VL53L1XDistanceSensor : public DistanceSensor {
       for (uint16_t msecs = 0; !_sensor->checkForDataReady() && msecs <= SENSOR_WAIT_PERIOD; msecs++) {
         delay(1);
         if (msecs == SENSOR_WAIT_PERIOD) {
-          Log.errorln(F("ERROR: VL53L1XDistanceSensor::probe() - Sensor failed to make data ready."));
+          Log.errorln(F("ERROR: VL53L1XDistanceSensor::probe() - %S failed to make data ready."), name());
           return;
         }
       }
