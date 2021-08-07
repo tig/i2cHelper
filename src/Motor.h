@@ -293,6 +293,7 @@ class Motor : public i2cDevice {
   uint8_t _cachedCurrent = 0;
 };
 
+// https://www.robotshop.com/en/md04-24v-20a-h-bridge-usb-dc-motor-driver.html
 class AdafruitMotorController : public Motor {
  public:
   using Motor::Motor;

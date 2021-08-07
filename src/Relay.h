@@ -90,21 +90,18 @@ class QwiicRelay : public Relay {
   };
 
   virtual void turnRelayOn() override {
-    //Relay::turnRelayOn();
     _relay->turnRelayOn();
-    //state();
+    ::delay(delay());
   };
 
   virtual void turnRelayOff() override {
-    //Relay::turnRelayOff();
     _relay->turnRelayOff();
-    //state();
+    ::delay(delay());
   };
 
   virtual void toggleRelay() override {
-    //Relay::toggleRelay();
     _relay->toggleRelay();
-    state();
+    ::delay(delay());
   };
 
   virtual uint8_t state() override {
@@ -118,6 +115,10 @@ class QwiicRelay : public Relay {
     state();
   }
 
+  bool delay() { return _delay;}
+  void setDelay(bool delay) { _delay = delay; }
+
  private:
   Qwiic_Relay* _relay = nullptr;
+  uint16_t _delay = 0;
 };

@@ -97,6 +97,10 @@ i2cDevice* my_devices[] = {
   };
 #endif
 
+unsigned long LA_DELAY_BEFORE = 250;
+unsigned long LA_DELAY_AFTER = 0;
+
+
 unsigned long DELAY_TIME = 250;
 unsigned long _timer = 0;
 /**
@@ -367,27 +371,25 @@ ShellCommandRegister* cmdMotor = ShellCommandClass(motor, "Controls the motor - 
   shell.println(*_motorController);
 });
 
-#define LA_DELAY 0
-
 ShellCommandRegister* cmdLA = ShellCommandClass(la, "Controls linear actuator via relays 1 & 2 - ([extend|retract|off])", {
   Cmds.logCommand(command->name, argc, argv);
 
   if (argc > 1 && !strcmp_P(argv[1], PSTR("extend"))) {
-    delay(LA_DELAY);
+    delay(LA_DELAY_BEFORE);
     _actuatorRelay1->turnRelayOff();
-    delay(LA_DELAY);
+    delay(LA_DELAY_AFTER);
     _actuatorRelay2->turnRelayOn();
   }
   if (argc > 1 && !strcmp_P(argv[1], PSTR("retract"))) {
-    delay(LA_DELAY);
+    delay(LA_DELAY_BEFORE);
     _actuatorRelay2->turnRelayOff();
-    delay(LA_DELAY);
+    delay(LA_DELAY_AFTER);
     _actuatorRelay1->turnRelayOn();
   }
   if (argc > 1 && !strcmp_P(argv[1], PSTR("off"))) {
-    delay(LA_DELAY);
+    delay(LA_DELAY_BEFORE);
     _actuatorRelay1->turnRelayOff();
-    delay(LA_DELAY);
+    delay(LA_DELAY_AFTER);
     _actuatorRelay2->turnRelayOff();
   }
   _actuatorRelay1->probe();
@@ -429,70 +431,203 @@ uint8_t fromHex(const char* s) {
   }
 }
 
+void relay_test_2() {
+  Log.noticeln(F("------------- Running Relay Test #2 "));
+  Wire.begin();
+  Log.noticeln(F("Wire initialzied"));
+
+
+  Qwiic_Relay r1(ActuatorRelay1Addr), r2(ActuatorRelay2Addr);
+  // r1.setDelay(LA_DELAY);
+  // r2.setDelay(LA_DELAY);
+  uint8_t r1state, r2state;
+
+  r1.begin();
+  r1.turnRelayOff();
+  r2.begin();
+  r2.turnRelayOff();
+
+  assert(0xFF != (r1state = r1.getState()));
+  assert(0xFF != (r2state = r2.getState()));
+
+  Log.traceln(F("relay 1 = %d"), r1state);
+  assert(r1state == 0x00);
+  Log.traceln(F("relay 2 = %d"), r2state);
+  assert(r2state == 0x00);
+
+  Log.traceln(F("  Delay is %d ms"), LA_DELAY_BEFORE);
+
+  for (int i = 0; i < 100; i++) {
+    Log.traceln(F("Run # %d"), i);
+
+    // TURN ON RELAY 1
+    Log.traceln(F("TURN ON: Relay 1 = %d"), r1state);
+    delay(LA_DELAY_BEFORE);
+    r1.turnRelayOn();
+    assert(0xFF != (r1state = r1.getState()));
+
+    Log.traceln(F("  relay 1 should be ON; actual: %d"), r1state);
+    assert(r1state == 0x01);
+
+
+    // TURN OFF RELAYS
+    Log.traceln(F("TURN OFF: Relay 1 = %d and Relay 2 = %d"), r1state, r2state);
+    delay(LA_DELAY_BEFORE);
+    r1.turnRelayOff();
+    r2.turnRelayOff();
+    assert(0xFF != (r1state = r1.getState()));
+    assert(0xFF != (r2state = r2.getState()));
+
+    Log.traceln(F("  relay 1 should be OFF; actual: %d"), r1state);
+    assert(r1state == 0x00);
+
+    // TURN ON RELAY 2
+    Log.traceln(F("TURN ON: Relay 2 = %d"), r2state);
+    delay(LA_DELAY_BEFORE);
+    r2.turnRelayOn();
+    assert(0xFF != (r2state = r2.getState()));
+
+    Log.traceln(F("  relay 2 should be ON; actual: %d"), r2state);
+    assert(r2state == 0x01);
+
+    Log.traceln(F("TURN OFF: Relay 1 = %d and Relay 2 = %d"), r1state, r2state);
+    delay(LA_DELAY_BEFORE);
+    r1.turnRelayOff();
+    r2.turnRelayOff();
+    assert(0xFF != (r1state = r1.getState()));
+    assert(0xFF != (r2state = r2.getState()));
+
+    Log.traceln(F("  relay 2 should be OFF; actual: %d"), r2state);
+    assert(r2state == 0x00);
+
+  }
+}
+
 void relays() {
   Log.noticeln(F("------------- Running Relay Test "));
   Wire.begin();
   Log.noticeln(F("Wire initialzied"));
 
   Qwiic_Relay r1(ActuatorRelay1Addr), r2(ActuatorRelay2Addr);
+  // r1.setDelay(LA_DELAY);
+  // r2.setDelay(LA_DELAY);
+  uint8_t r1state, r2state;
 
   r1.begin();
+  r1.turnRelayOff();
   r2.begin();
+  r2.turnRelayOff();
 
-  Log.traceln(F("relay 1 = %X"), r1.getState());
-  Log.traceln(F("relay 2 = %X"), r2.getState());
-  Log.traceln(F("  Delay is %d ms"), LA_DELAY);
+  assert(0xFF != (r1state = r1.getState()));
+  assert(0xFF != (r2state = r2.getState()));
 
-  for (int i = 0; i < 5; i++) {
-    // extend
-    Log.traceln(F("Retract: relay 1 = %d, relay 2 = %d"), r1.getState(), r2.getState());
+  Log.traceln(F("relay 1 = %d"), r1state);
+  assert(r1state == 0x00);
+  Log.traceln(F("relay 2 = %d"), r2state);
+  assert(r2state == 0x00);
+
+  Log.traceln(F("  Delay is %d ms"), LA_DELAY_BEFORE);
+
+  for (int i = 0; i < 100; i++) {
+    Log.traceln(F("-------------- Run # %d"), i);
+
+    // stop
+    Log.traceln(F("Stop: relay 1 = %d, relay 2 = %d"), r1state, r2state);
+    delay(LA_DELAY_BEFORE);
+    r1.turnRelayOff();
+    delay(LA_DELAY_AFTER);
+    assert(0xFF != (r1state = r1.getState()));
+    assert(0xFF != (r2state = r2.getState()));
+
+    Log.traceln(F("  relay 1 should be OFF; actual: %d"), r1state);
+    assert(r1state == 0x00);
+
+    delay(LA_DELAY_BEFORE);
     r2.turnRelayOff();
-    delay(LA_DELAY);
-    Log.traceln(F("  relay 2 should be OFF = %d"), r2.getState());
+    delay(LA_DELAY_AFTER);
+    assert(0xFF != (r1state = r1.getState()));
+    assert(0xFF != (r2state = r2.getState()));
 
+    Log.traceln(F("  relay 2 should be OFF; actual: %d"), r2state);
+    assert(r2state == 0x00);
+
+    // Retract
+    Log.traceln(F("Retract: relay 1 = %d, relay 2 = %d"), r1state, r2state);
+    delay(LA_DELAY_BEFORE);
+    r2.turnRelayOff();
+    delay(LA_DELAY_AFTER);
+    assert(0xFF != (r1state = r1.getState()));
+    assert(0xFF != (r2state = r2.getState()));
+
+    Log.traceln(F("  relay 2 should be OFF; actual: %d"), r2state);
+    assert(r2state == 0x00);
+
+    delay(LA_DELAY_BEFORE);
     r1.turnRelayOn();
-    delay(LA_DELAY);
-    Log.traceln(F("  relay 1 should be ON = %d"), r1.getState());
-    Log.traceln(F("  waiting 1000ms."));
-    delay(1000);
+    delay(LA_DELAY_AFTER);
+    assert(0xFF != (r1state = r1.getState()));
+    assert(0xFF != (r2state = r2.getState()));
+
+    Log.traceln(F("  relay 1 should be ON; actual: %d"), r1state);
+    assert(r1state == 0x01);
+
+    Log.traceln(F("Delaying..."));
+    delay(1000*2);
 
     // stop
-    Log.traceln(F("Stop: relay 1 = %d, relay 2 = %d"), r1.getState(), r2.getState());
+    Log.traceln(F("Stop: relay 1 = %d, relay 2 = %d"), r1state, r2state);
+    delay(LA_DELAY_BEFORE);
     r1.turnRelayOff();
-    delay(LA_DELAY);
-    Log.traceln(F("  relay 1 should be OFF = %d"), r1.getState());
+    delay(LA_DELAY_AFTER);
+    assert(0xFF != (r1state = r1.getState()));
+    assert(0xFF != (r2state = r2.getState()));
 
+    Log.traceln(F("  relay 1 should be OFF; actual: %d"), r1state);
+    assert(r1state == 0x00);
+
+    delay(LA_DELAY_BEFORE);
     r2.turnRelayOff();
-    delay(LA_DELAY);
-    Log.traceln(F("  relay 1 should be OFF = %d"), r2.getState());
+    delay(LA_DELAY_AFTER);
+    assert(0xFF != (r1state = r1.getState()));
+    assert(0xFF != (r2state = r2.getState()));
 
-    // retract
-    Log.traceln(F("Extend: relay 1 = %d, relay 2 = %d"), r1.getState(), r2.getState());
+    Log.traceln(F("  relay 2 should be OFF; actual: %d"), r2state);
+    assert(r2state == 0x00);
+
+    // Extend
+    Log.traceln(F("Extend: relay 1 = %d, relay 2 = %d"), r1state, r2state);
+    delay(LA_DELAY_BEFORE);
     r1.turnRelayOff();
-    delay(LA_DELAY);
-    Log.traceln(F("  relay 1 should be OFF = %d"), r1.getState());
+    delay(LA_DELAY_AFTER);
+    assert(0xFF != (r1state = r1.getState()));
+    assert(0xFF != (r2state = r2.getState()));
 
+    Log.traceln(F("  relay 1 should be OFF; actual: %d"), r1state);
+    assert(r1state == 0x00);
+
+    delay(LA_DELAY_BEFORE);
     r2.turnRelayOn();
-    delay(LA_DELAY);
-    Log.traceln(F("  relay 2 should be ON = %d"), r2.getState());
-    Log.traceln(F("  waiting 2000ms."));
-    delay(2000);
+    delay(LA_DELAY_AFTER);
+    assert(0xFF != (r1state = r1.getState()));
+    assert(0xFF != (r2state = r2.getState()));
 
-    // stop
-    Log.traceln(F("Stop: relay 1 = %d, relay 2 = %d"), r1.getState(), r2.getState());
-    r1.turnRelayOff();
-    delay(LA_DELAY);
-    Log.traceln(F("  relay 1 should be OFF = %d"), r1.getState());
+    Log.traceln(F("  relay 2 should be ON; actual: %d"), r2state);
+    assert(r2state == 0x01);
 
-    r2.turnRelayOff();
-    delay(LA_DELAY);
-    Log.traceln(F("  relay 1 should be OFF = %d"), r2.getState());
+    Log.traceln(F("Delaying..."));
+    delay(1000*2);
+
   }
 }
 
-ShellCommandRegister* cmdi2c = ShellCommandClass(test, "runs i2c tests and tools [scan|btns|progbtn <old> <new>]", {
+ShellCommandRegister* cmdi2c = ShellCommandClass(test, "runs i2c tests and tools [scan|relays|relay2|btns|progbtn <old> <new>]", {
   Cmds.logCommand(command->name, argc, argv);
   bool success = true;
+
+  if (argc > 1 && !strcmp_P(argv[1], PSTR("relay2"))) {
+    relay_test_2();
+  }
+
   if (argc > 1 && !strcmp_P(argv[1], PSTR("relays"))) {
     relays();
   }
