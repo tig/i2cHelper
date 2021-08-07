@@ -14,24 +14,6 @@
 #include <Ethernet.h>
 #endif
 
-// P1AM
-#ifdef ARDUINO_ARCH_SAMD
-#define MAC_ADDRESS 0x90, 0xA2, 0xDA, 0x0E, 0xFE, 0x40
-#define STATIC_IP   169, 254, 0, 1
-#endif
-
-// MEGA2560
-#ifdef ARDUINO_ARCH_AVR
-#define MAC_ADDRESS 0x90, 0xA2, 0xDA, 0x0E, 0xFE, 0x41
-#define STATIC_IP   192, 168, 1, 161
-#endif
-
-// ESP32 Thing Plus
-#ifdef ARDUINO_ARCH_ESP32
-#define MAC_ADDRESS 0x90, 0xA2, 0xDA, 0x0E, 0xFE, 0x42
-#define STATIC_IP   192, 168, 1, 162
-#endif
-
 /**
  * @brief Singleton class representing the exposed Commands (API). The API is nominally
  * exposed with Shell (both Ethernet/Telnet and Serial), but can also be exposed via a keypad or other input in 
@@ -48,7 +30,7 @@ class Commands : public Printable {
   bool begin();
 
   // Initialize the Commands interface over Ethernet / Wifi (telnet)
-  bool beginServer(const char* ssid = nullptr, const char* pwd = nullptr);
+  bool beginServer(const byte *macAddress, const IPAddress& ip, const char* ssid = nullptr, const char* pwd = nullptr);
 
   // Call every iteration of loop()
   void handle();
@@ -111,7 +93,7 @@ class Commands : public Printable {
 
  private:
   // Prohibiting External Constructions
-  Commands() : _macaddress{MAC_ADDRESS}, _ip(STATIC_IP) {}
+  Commands() : _macaddress{0xDE, 0xAD, 0xBE, 0xEE, 0xEE, 0xFF}, _ip(169, 254, 0, 1) {}
 
   // C++ 11
   // =======

@@ -33,7 +33,9 @@ bool Commands::begin() {
 /**
  * @brief Initializes the Ethernet/Wifi stack and starts the TCP/IP Server
  */
-bool Commands::beginServer(const char *ssid, const char *pwd) {
+bool Commands::beginServer(const byte* macAddress, const IPAddress &ip, const char *ssid, const char *pwd) {
+  memcpy(_macaddress, macAddress, 6);
+  _ip = ip;
 #ifdef USE_WIFI
   if (ssid != nullptr && pwd != nullptr) {
     // Only allow connect via command if we've already tried once
@@ -110,7 +112,7 @@ bool Commands::beginServer(const char *ssid, const char *pwd) {
     if (Ethernet.linkStatus() == LinkON && _netWasConnected == false) {
       Log.noticeln(F("Ethernet cable detected"));
       delay(2000);
-      beginServer();
+      beginServer(_macaddress, _ip);
     } else if (Ethernet.linkStatus() == LinkOFF && _netWasConnected == true) {
       Log.errorln(F("ERROR: Ethernet cable has been unplugged"));
       _netWasConnected = false;
