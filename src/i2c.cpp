@@ -120,28 +120,28 @@ bool i2c::begin(i2cDevice** devices, size_t num) {
   if (!Wire.begin()) {
     Log.errorln(F("ERROR: Wire.begin failed"));
   } else {
-    Log.noticeln(F("Wire initialzied"));
+    Log.traceln(F("Wire initialzied"));
   }
 #else
   Wire.begin();
-  Log.noticeln(F("Wire initialzied"));
+  Log.traceln(F("Wire initialzied"));
 #endif
 
-  Log.traceln(F("Looking for these %d devices"), _devices.size());
+  Log.noticeln(F("Looking for %d device..."), _devices.size());
   for (uint8_t i = 0; i < _devices.size(); i++) {
-    Log.trace(F("Address %X - %S --"), _devices[i]->address(), _devices[i]->name());
+    Log.notice(F("Address %X - %S --"), _devices[i]->address(), _devices[i]->name());
     _devices[i]->setFound(false);
     if (_devices[i]->isMux()) {
-      Log.trace(F(" is a mux"));
+      Log.notice(F(" is a mux --"));
     }
     if (_devices[i]->muxPort() != 0xFF) {
-      Log.trace(F(" on mux %X:%X"), _devices[i]->muxPort(), _devices[i]->mux()->getAddress());
+      Log.notice(F(" on mux %X:%X --"), _devices[i]->muxPort(), _devices[i]->mux()->getAddress());
     }
 
     if (_devices[i]->begin()) {
-      Log.traceln(F(""));  //Log.traceln(F(" -- initialized"));
+      Log.noticeln(F(" OK!"));
     } else {
-      Log.errorln(F("\n  ERROR: Device %S at %X failed to begin"), _devices[i]->name(), _devices[i]->address());
+      Log.errorln(F("\n  ERROR: %S at %X was not found. Check wiring."), _devices[i]->name(), _devices[i]->address());
       success = false;
     }
   }

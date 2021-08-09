@@ -80,11 +80,11 @@ class QwiicRelay : public Relay {
       success = _relay->begin();
       if (!success) {
         Log.errorln(F("  ERROR: %S setup failed"), name());
+      } else {
+        turnRelayOff();
+        setState(_relay->getState());
+        Log.trace(F(" [%p]"), this);
       }
-      turnRelayOff();
-      setState(_relay->getState());
-
-      Log.trace(F(" [%p]"), this);
     }
     return success;
   };
@@ -119,7 +119,7 @@ class QwiicRelay : public Relay {
     state();
   }
 
-  bool delay() { return _delay;}
+  bool delay() { return _delay; }
   void setDelay(bool delay) { _delay = delay; }
 
  private:
