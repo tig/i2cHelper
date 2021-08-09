@@ -91,7 +91,9 @@ class QwiicContactSensor : public ContactSensor {
   }
 
   virtual bool isContacted() override {
-    bool contact = _button.isPressed();
+    // Call base to setPort
+    bool contact = ContactSensor::isContacted();
+    contact = _button.isPressed();
     ContactSensor::setContact(contact);
     return contact;
   }

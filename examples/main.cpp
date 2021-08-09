@@ -15,6 +15,27 @@
 #include <SparkFun_Qwiic_Button.h>
 #include <SparkFun_Qwiic_relay.h>
 
+#ifdef ARDUINO_ARCH_SAMD
+#include <P1AM.h>
+#endif
+
+// P1AM
+#ifdef ARDUINO_ARCH_SAMD
+const byte MAC_ADDRESS[6]{0x90, 0xA2, 0xDA, 0x0E, 0xFE, 0x40};
+const IPAddress STATIC_IP{169, 254, 0, 1};
+#endif
+
+// MEGA2560
+#ifdef ARDUINO_ARCH_AVR
+const byte MAC_ADDRESS[6]{0x90, 0xA2, 0xDA, 0x0E, 0xFE, 0x41};
+const IPAddress STATIC_IP{192, 168, 1, 161};
+#endif
+
+// ESP32 Thing Plus
+#ifdef ARDUINO_ARCH_ESP32
+const byte MAC_ADDRESS[6]{0x90, 0xA2, 0xDA, 0x0E, 0xFE, 0x42};
+const IPAddress STATIC_IP{192, 168, 1, 162};
+#endif
 #define HALT_ON_ASSERT
 
 //#include "avr8-stub.h"
@@ -94,19 +115,14 @@ i2cDevice* my_devices[] = {
 #if defined(ARDUINO_ARCH_ESP32)
     _esp32Button};
 #else
-  };
+};
 #endif
 
 unsigned long LA_DELAY_BEFORE = 250;
 unsigned long LA_DELAY_AFTER = 0;
 
-
-unsigned long DELAY_TIME = 250;
+unsigned long DELAY_TIME = 150;
 unsigned long _timer = 0;
-/**
- * @brief Number of seconds (DELAY_TIME) to log state in the loop
- */
-int _logStateInLoopFor = 0;
 
 /**
  * @brief Commands for the shell/serial command processor.
@@ -153,7 +169,7 @@ ShellCommandRegister* cmdInit = ShellCommandClass(init, "Inits - [all|wifi <ssid
   Cmds.logCommand(command->name, argc, argv);
 
   if (argc == 4 && !strcmp_P(argv[1], PSTR("wifi"))) {
-    Cmds.beginServer(argv[2], argv[3]);
+    Cmds.beginServer(MAC_ADDRESS, STATIC_IP, argv[2], argv[3]);
     return;
   }
 
@@ -171,7 +187,6 @@ ShellCommandRegister* cmdInit = ShellCommandClass(init, "Inits - [all|wifi <ssid
       } else {
         Log.noticeln(F("\n------------- All devices initialzied. The system is functional.\n"));
         success = true;
-        _logStateInLoopFor = 1;
       }
     }
   }
@@ -242,52 +257,52 @@ ShellCommandRegister* cmdGet = ShellCommandClass(get, "Gets state - [all|i2c|ip|
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("motor")))) {
     _motorController->probe();
     Log.noticeln(F("%p"), *_motorController);
-    shell.println(*_motorController);
+    //shell.println(*_motorController);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("fwd")))) {
     _forwardDistanceSensor->distance();
     Log.noticeln(F("%p"), *_forwardDistanceSensor);
-    shell.println(*_forwardDistanceSensor);
+    //shell.println(*_forwardDistanceSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("rwd")))) {
     _rearwardDistanceSensor->distance();
     Log.noticeln(F("%p"), *_rearwardDistanceSensor);
-    shell.println(*_rearwardDistanceSensor);
+    //shell.println(*_rearwardDistanceSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("fwdend")))) {
     _forwardEndRangeSensor->probe();
     Log.noticeln(F("%p"), *_forwardEndRangeSensor);
-    shell.println(*_forwardEndRangeSensor);
+    //shell.println(*_forwardEndRangeSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("rwdend")))) {
     _rearwardEndRangeSensor->probe();
     Log.noticeln(F("%p"), *_rearwardEndRangeSensor);
-    shell.println(*_rearwardEndRangeSensor);
+    //shell.println(*_rearwardEndRangeSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("opened")))) {
     _openedSensor->probe();
     Log.noticeln(F("%p"), *_openedSensor);
-    shell.println(*_openedSensor);
+    //shell.println(*_openedSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("closed")))) {
     _closedSensor->probe();
     Log.noticeln(F("%p"), *_closedSensor);
-    shell.println(*_closedSensor);
+    //shell.println(*_closedSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("relay1")))) {
     _actuatorRelay1->probe();
     Log.noticeln(F("%p"), *_actuatorRelay1);
-    shell.println(*_actuatorRelay1);
+    //shell.println(*_actuatorRelay1);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("relay2")))) {
     _actuatorRelay2->probe();
     Log.noticeln(F("%p"), *_actuatorRelay2);
-    shell.println(*_actuatorRelay2);
+    //shell.println(*_actuatorRelay2);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("resurrect")))) {
     _resurrectionRelay->probe();
     Log.noticeln(F("%p"), *_resurrectionRelay);
-    shell.println(*_resurrectionRelay);
+    //shell.println(*_resurrectionRelay);
   }
 #if defined(ARDUINO_ARCH_ESP32)
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("btn")))) {
@@ -295,7 +310,7 @@ ShellCommandRegister* cmdGet = ShellCommandClass(get, "Gets state - [all|i2c|ip|
     Log.noticeln(F("%p"), *_esp32Button);
     shell.println(*_esp32Button);
   }
-#endif  
+#endif
 });
 
 ShellCommandRegister* cmdRelay = ShellCommandClass(relay, "Controls a relay - [1|2|res] ([on|off|toggle])", {
@@ -337,22 +352,18 @@ ShellCommandRegister* cmdMotor = ShellCommandClass(motor, "Controls the motor - 
     return;
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("fwd"))) {
     _motorController->forward();
-    _logStateInLoopFor = 20;
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("rev"))) {
     _motorController->reverse();
-    _logStateInLoopFor = 20;
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("stop"))) {
-    _motorController->setSpeed(0);
-    _logStateInLoopFor = 20;
+    _motorController->stop();
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("off"))) {
     _motorController->emergencyStop();
+    return;
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("speed"))) {
     if (argc > 2) {
       _motorController->setSpeed(strtol(argv[2], nullptr, 10));
-      _logStateInLoopFor = 20;
     } else {
       _motorController->probe();
-      shell.println(_motorController->speed(), DEC);
       return;
     }
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("accel"))) {
@@ -360,7 +371,6 @@ ShellCommandRegister* cmdMotor = ShellCommandClass(motor, "Controls the motor - 
       _motorController->setAcceleration(strtol(argv[2], nullptr, 10));
     } else {
       _motorController->probe();
-      shell.println(_motorController->directionString());
       return;
     }
   } else {
@@ -368,7 +378,6 @@ ShellCommandRegister* cmdMotor = ShellCommandClass(motor, "Controls the motor - 
     shell.help();
   }
   _motorController->probe();
-  shell.println(*_motorController);
 });
 
 ShellCommandRegister* cmdLA = ShellCommandClass(la, "Controls linear actuator via relays 1 & 2 - ([extend|retract|off])", {
@@ -393,11 +402,7 @@ ShellCommandRegister* cmdLA = ShellCommandClass(la, "Controls linear actuator vi
     _actuatorRelay2->turnRelayOff();
   }
   _actuatorRelay1->probe();
-  shell.print(*_actuatorRelay1);
-  shell.print(F(", "));
   _actuatorRelay2->probe();
-  shell.println(*_actuatorRelay2);
-  //shell.println(*_actuatorRelay2);
 });
 
 void btns() {
@@ -436,7 +441,6 @@ void relay_test_2() {
   Wire.begin();
   Log.noticeln(F("Wire initialzied"));
 
-
   Qwiic_Relay r1(ActuatorRelay1Addr), r2(ActuatorRelay2Addr);
   // r1.setDelay(LA_DELAY);
   // r2.setDelay(LA_DELAY);
@@ -469,7 +473,6 @@ void relay_test_2() {
     Log.traceln(F("  relay 1 should be ON; actual: %d"), r1state);
     assert(r1state == 0x01);
 
-
     // TURN OFF RELAYS
     Log.traceln(F("TURN OFF: Relay 1 = %d and Relay 2 = %d"), r1state, r2state);
     delay(LA_DELAY_BEFORE);
@@ -499,7 +502,6 @@ void relay_test_2() {
 
     Log.traceln(F("  relay 2 should be OFF; actual: %d"), r2state);
     assert(r2state == 0x00);
-
   }
 }
 
@@ -572,7 +574,7 @@ void relays() {
     assert(r1state == 0x01);
 
     Log.traceln(F("Delaying..."));
-    delay(1000*2);
+    delay(1000 * 2);
 
     // stop
     Log.traceln(F("Stop: relay 1 = %d, relay 2 = %d"), r1state, r2state);
@@ -615,8 +617,7 @@ void relays() {
     assert(r2state == 0x01);
 
     Log.traceln(F("Delaying..."));
-    delay(1000*2);
-
+    delay(1000 * 2);
   }
 }
 
@@ -710,6 +711,8 @@ void setup(void) {
 
   if (!Cmds.begin()) {
     Log.errorln(F("ERROR: Commands failed to initalize"));
+  } else {
+    Cmds.beginServer(MAC_ADDRESS, STATIC_IP);
   }
 
 #if 0
@@ -739,14 +742,24 @@ void loop() {
   // and button presses from keypad
   Cmds.handle();
 
-  if (/*_logStateInLoopFor > 0 && Bus.initialized() &&*/ (millis() - _timer) >= DELAY_TIME) {
+  if (Bus.initialized() && (millis() - _timer) >= DELAY_TIME) {
     _timer = millis();
-    //_logStateInLoopFor--;
-
     for (uint8_t i = 0; i < sizeof(my_devices) / sizeof(i2cDevice*); i++) {
       if (my_devices[i]->initialized()) {
         my_devices[i]->probe();
       }
+    }
+
+    if (_rearwardEndRangeSensor->initialized() && _rearwardEndRangeSensor->isContacted() &&
+        _motorController->initialized() && _motorController->direction() != Motor::MOTOR_STOP) {
+      Log.errorln(F("loop reardward emergency stop"));
+      _motorController->emergencyStop();
+    }
+
+    if (_forwardEndRangeSensor->initialized() && _forwardEndRangeSensor->isContacted() &&
+        _motorController->initialized() && _motorController->direction() != Motor::MOTOR_STOP) {
+      Log.errorln(F("loop reardward emergency stop"));
+      _motorController->emergencyStop();
     }
   }
 }
