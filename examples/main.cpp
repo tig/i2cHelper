@@ -142,11 +142,11 @@ ShellCommandRegister* cmdLog = ShellCommandClass(log, "Sets logging - [serial*|s
   Log.setLevel(level);
 
   if (argc > 1 && !strcmp_P(argv[1], PSTR("serial"))) {
-    Log.noticeln(F("Changing logging to log to %S"), argv[1]);
+    Log.noticeln(F("Changing logging to log to %s"), argv[1]);
     Log.begin(level, &Serial, false);
     Log.noticeln(F("serial"));
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("shell"))) {
-    Log.noticeln(F("Changing logging to log to %S"), argv[1]);
+    Log.noticeln(F("Changing logging to log to %s"), argv[1]);
     Log.begin(level, &shell, false);
     Log.noticeln(F("shell"));
   }
@@ -162,6 +162,17 @@ ShellCommandRegister* cmdShell = ShellCommandClass(shell, "Configures shell - [t
     shell.setEcho(true);
     shell.setPrompt(Cmds.shellPrompt);
     shell.println(F("shell = telnet"));
+  }
+});
+
+ShellCommandRegister* cmdNotify = ShellCommandClass(notify, "Enables state change notifications for this shell - [on*|off]", {
+  Cmds.logCommand(command->name, argc, argv);
+  if (argc > 1 && !strcmp_P(argv[1], PSTR("on"))) {
+    Cmds._multiplex.enable(shell.stream());
+    shell.println(F("notify = on"));
+  } else if (argc > 1 && !strcmp_P(argv[1], PSTR("off"))) {
+    Cmds._multiplex.disable(shell.stream());
+    shell.println(F("notify = off"));
   }
 });
 
@@ -248,7 +259,7 @@ ShellCommandRegister* cmdGet = ShellCommandClass(get, "Gets state - [all|i2c|ip|
 
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("ip")))) {
     Log.noticeln(F("%p"), &Cmds);
-    shell.println(Cmds);
+    Cmds._multiplex.println(Cmds);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("i2c")))) {
     Log.noticeln(F("------------- Verifying All Devices are Working "));
@@ -257,58 +268,58 @@ ShellCommandRegister* cmdGet = ShellCommandClass(get, "Gets state - [all|i2c|ip|
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("motor")))) {
     _motorController->probe();
     Log.noticeln(F("%p"), *_motorController);
-    //shell.println(*_motorController);
+    Cmds._multiplex.println(*_motorController);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("fwd")))) {
     _forwardDistanceSensor->distance();
     Log.noticeln(F("%p"), *_forwardDistanceSensor);
-    //shell.println(*_forwardDistanceSensor);
+    Cmds._multiplex.println(*_forwardDistanceSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("rwd")))) {
     _rearwardDistanceSensor->distance();
     Log.noticeln(F("%p"), *_rearwardDistanceSensor);
-    //shell.println(*_rearwardDistanceSensor);
+    Cmds._multiplex.println(*_rearwardDistanceSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("fwdend")))) {
     _forwardEndRangeSensor->probe();
     Log.noticeln(F("%p"), *_forwardEndRangeSensor);
-    //shell.println(*_forwardEndRangeSensor);
+    Cmds._multiplex.println(*_forwardEndRangeSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("rwdend")))) {
     _rearwardEndRangeSensor->probe();
     Log.noticeln(F("%p"), *_rearwardEndRangeSensor);
-    //shell.println(*_rearwardEndRangeSensor);
+    Cmds._multiplex.println(*_rearwardEndRangeSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("opened")))) {
     _openedSensor->probe();
     Log.noticeln(F("%p"), *_openedSensor);
-    //shell.println(*_openedSensor);
+    Cmds._multiplex.println(*_openedSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("closed")))) {
     _closedSensor->probe();
     Log.noticeln(F("%p"), *_closedSensor);
-    //shell.println(*_closedSensor);
+    Cmds._multiplex.println(*_closedSensor);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("relay1")))) {
     _actuatorRelay1->probe();
     Log.noticeln(F("%p"), *_actuatorRelay1);
-    //shell.println(*_actuatorRelay1);
+    Cmds._multiplex.println(*_actuatorRelay1);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("relay2")))) {
     _actuatorRelay2->probe();
     Log.noticeln(F("%p"), *_actuatorRelay2);
-    //shell.println(*_actuatorRelay2);
+    Cmds._multiplex.println(*_actuatorRelay2);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("resurrect")))) {
     _resurrectionRelay->probe();
     Log.noticeln(F("%p"), *_resurrectionRelay);
-    //shell.println(*_resurrectionRelay);
+    Cmds._multiplex.println(*_resurrectionRelay);
   }
 #if defined(ARDUINO_ARCH_ESP32)
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("btn")))) {
     _esp32Button->probe();
     Log.noticeln(F("%p"), *_esp32Button);
-    shell.println(*_esp32Button);
+    Cmds._multiplex..println(*_esp32Button);
   }
 #endif
 });
@@ -725,12 +736,16 @@ void setup(void) {
 
   for (uint8_t i = 0; i < sizeof(my_devices) / sizeof(i2cDevice*); i++) {
     my_devices[i]->registerStateChange([](i2cDevice* device) {
-      //Log.noticeln(F("%p"), device);
+//Log.noticeln(F("%p"), device);
+#ifndef MULTIPLEX_
+      Cmds._multiplex.println(*device);
+#else
       for (uint16_t i = 0; i < sizeof(Cmds._telnetShell) / sizeof(Shell); i++) {
-        if (Cmds._shellClient[i] != nullptr) {
+        if (Cmds._shellClient[i].connected()) {
           Cmds._telnetShell[i].println(*device);
         }
       }
+#endif
     });
   }
 

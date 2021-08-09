@@ -105,6 +105,10 @@ class QwiicRelay : public Relay {
   };
 
   virtual uint8_t state() override {
+    if (!initialized()) {
+      Log.traceln(F("ERROR: Motor::state() when not initialized."));
+      return 0;
+    }    
     uint8_t result = _relay->getState();
     //Log.traceln(F("QwiicRelay::state() relay says %d"), result);
     Relay::setState(result);

@@ -1,5 +1,6 @@
 #pragma once
 #include <Shell.h>
+#include <Multiplex.h>
 
 #ifdef ARDUINO_ARCH_ESP32
 #define USE_WIFI
@@ -23,7 +24,7 @@
  */
 class Commands : public Printable {
  private:
-  static const uint16_t MAX_CLIENTS = 4;
+  static const uint16_t MAX_CLIENTS = 2;
 
  public:
   // Initialize the Commands over Serial
@@ -40,6 +41,8 @@ class Commands : public Printable {
   Shell _serialShell;
   Shell _telnetShell[MAX_CLIENTS];
   char shellPrompt[2] = ">";
+
+  Multiplex _multiplex;
 
   /**
    * @brief `Printable::printTo` -    *
@@ -67,7 +70,7 @@ class Commands : public Printable {
 #endif
 #ifdef USE_ETHERNET
   EthernetServer _shellServer = _tcpPort;
-  EthernetClient* _shellClient[MAX_CLIENTS];
+  EthernetClient _shellClient[MAX_CLIENTS];
 #endif
   bool _isInitialized = false;
 #ifdef USE_ETHERNET

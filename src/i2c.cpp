@@ -41,7 +41,7 @@ void i2cDevice::probe() {
 bool i2cDevice::setPort() {
   //Log.trace(F("(setPort() %S on (%X:%X))"), name(), address(), muxPort());
   if (!initialized()) {
-    Log.errorln(F("  ERROR: %S on (%X:%X) i2cDevice::setPort() when not initialized."), name(), address(), muxPort());
+    Log.traceln(F("  ERROR: %S on (%X:%X) i2cDevice::setPort() when not initialized."), name(), address(), muxPort());
     return false;
   }
   if (isMux() || muxPort() != 0xFF) assert(_mux);
@@ -178,7 +178,7 @@ i2cDevice* i2c::findDevice(uint8_t address, uint8_t port) {
  */
 bool i2c::probeAll(int delayTime) {
   if (!initialized()) {
-    Log.errorln(F("ERROR: i2c::scanI2C when not initialized."));
+    Log.traceln(F("ERROR: i2c::scanI2C when not initialized."));
     return false;
   }
 

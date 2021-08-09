@@ -10,3 +10,6 @@
 	path = lib/SparkFun_I2C_Mux_Arduino_Library
 	url = tig:tig/SparkFun_I2C_Mux_Arduino_Library.git
 	branch = master
+[submodule "lib/Multiplex"]
+	path = lib/Multiplex
+	url = tig:tig/Multiplex

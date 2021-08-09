@@ -2,9 +2,28 @@
 #include <ArduinoLog.h>
 #include <assert.h>
 #include <Shell.h>
+#include <Multiplex.h>
 
 //#include "main.h"
 #include "Commands.h"
+
+#ifdef __arm__
+// should use uinstd.h to define sbrk but Due causes a conflict
+extern "C" char* sbrk(int incr);
+#else   // __ARM__
+extern char* __brkval;
+#endif  // __arm__
+
+int _freeMemory() {
+  char top;
+#ifdef __arm__
+  return &top - reinterpret_cast<char*>(sbrk(0));
+#elif defined(CORE_TEENSY) || (ARDUINO > 103 && ARDUINO != 151)
+  return &top - __brkval;
+#else   // __arm__
+  return __brkval ? &top - __brkval : &top - __malloc_heap_start;
+#endif  // __arm__
+}
 
 void Commands::logCommand(const __FlashStringHelper *name, int argc, const ShellArguments &argv) {
   Log.trace(F(">>>>> Command: %S"), name);
@@ -19,7 +38,10 @@ bool Commands::begin() {
   if (_isInitialized) return true;
 
   for (uint16_t client = 0; client < MAX_CLIENTS; client++) {
-    _shellClient[client] = nullptr;
+    if (_shellClient[client]) {
+      _shellClient[client].stop();
+    }
+    _telnetShell[client].end();
   }
 
   bool success = true;
@@ -33,7 +55,7 @@ bool Commands::begin() {
 /**
  * @brief Initializes the Ethernet/Wifi stack and starts the TCP/IP Server
  */
-bool Commands::beginServer(const byte* macAddress, const IPAddress &ip, const char *ssid, const char *pwd) {
+bool Commands::beginServer(const byte *macAddress, const IPAddress &ip, const char *ssid, const char *pwd) {
   memcpy(_macaddress, macAddress, 6);
   _ip = ip;
 #ifdef USE_WIFI
@@ -135,7 +157,7 @@ bool Commands::beginServer(const byte* macAddress, const IPAddress &ip, const ch
 
     // Handle new/disconnecting clients.
 #ifdef USE_WIFI
-    WiFiClient newClient = _shellServer.available();
+    WiFiClient newClient = _shellServer.accept();
 #endif
 #ifdef USE_ETHERNET
     EthernetClient newClient = _shellServer.accept();
@@ -143,23 +165,28 @@ bool Commands::beginServer(const byte* macAddress, const IPAddress &ip, const ch
     if (newClient.connected()) {
       uint16_t client;
       for (client = 0; client < MAX_CLIENTS; client++) {
-        if (_shellClient[client] == nullptr) {
-
+        if (!_shellClient[client].connected()) {
 #ifdef USE_WIFI
           _shellClient[client] = new WiFiClient(newClient);
 #endif
 #ifdef USE_ETHERNET
-          _shellClient[client] = new EthernetClient(newClient);
+          _shellClient[client] = newClient;
 #endif
-         
-          Log.noticeln(F("Client #%d at %p is attempting to connect to port %d."), client,
-              _shellClient[client]->remoteIP(), _shellClient[client]->localPort());
 
-          if (_telnetShell[client].begin(*_shellClient[client], 20, Terminal::Mode::Serial)) {
+          Log.noticeln(F("Client #%d at %p is attempting to connect to port %d. Free memory: %d bytes"), client,
+              _shellClient[client].remoteIP(), _shellClient[client].localPort(), _freeMemory());
+
+          if (_telnetShell[client].begin(_shellClient[client], 20, Terminal::Mode::Serial)) {
             Log.noticeln(F("  Client %p connected to port %d."),
-                _shellClient[client]->remoteIP(), _shellClient[client]->localPort());
+                _shellClient[client].remoteIP(), _shellClient[client].localPort());
             _telnetShell[client].setEcho(true);
             _telnetShell[client].setPrompt(shellPrompt);
+
+            // Add this shell to the multiplexer
+            //Log.traceln(F("Adding client %d to multiplex"), client);
+            _multiplex.add(&_shellClient[client]);
+
+            break;
           } else {
             Log.noticeln(F("  Client connect attempt failed. Shell::begin returned false (out of memory?)."));
           }
@@ -167,23 +194,41 @@ bool Commands::beginServer(const byte* macAddress, const IPAddress &ip, const ch
         }
       }
       if (client == MAX_CLIENTS) {
+        Log.noticeln(F("  Client connection refused; already %d clients connected."), MAX_CLIENTS);
         newClient.stop();
       }
     } else {
+      // Shutdown any disconnected clients and loop() the rest
       for (uint16_t client = 0; client < MAX_CLIENTS; client++) {
-        if (_shellClient[client] != nullptr && !_shellClient[client]->connected()) {
+        if (_shellClient[client].connected()) {
+          // Perform periodic shell processing on the active client.
+          _telnetShell[client].loop();
+        } else if (_shellClient[client].getSocketNumber() != MAX_SOCK_NUM) {
           // The client has been disconnected. Shut down the shell.
+          Log.noticeln(F("Client %d has disconnected. Socket status is %X"), client, _shellClient[client].status());
+
+          // Multiplex does not directly support a remove API. Only reset().
+          // So whenever a client disconnects we tear the whole thing down and re-add any remaining
+          // clients.
+          //Log.traceln(F("Resetting multiplex"));
+          _multiplex.reset();
+
           // TODO: if this client was logging, set back to Serial
           _telnetShell[client].end();
 
-          Log.noticeln(F("Client %d has been disconnected from port."), client);
           // Now shut down the client
-          _shellClient[client]->stop();
-          delete _shellClient[client];
-          _shellClient[client] = nullptr;
-        } else if (_shellClient[client] != nullptr) {
-          // Perform periodic shell processing on the active client.
-          _telnetShell[client].loop();
+          _shellClient[client].stop();
+          Log.noticeln(F("Client %d has been stopped"), client);
+        } 
+       
+      }
+      if (_multiplex.count() == 0) {
+        // Multiplex does not directly support a remove API. Only reset().
+        for (uint16_t client = 0; client < MAX_CLIENTS; client++) {
+          if (_shellClient[client].connected()) {
+            //Log.traceln(F("Re-adding client %d to multiplex"), client);
+            _multiplex.add(&_shellClient[client]);
+          }
         }
       }
     }

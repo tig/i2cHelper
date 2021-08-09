@@ -91,7 +91,7 @@ class Motor : public i2cDevice {
     }
 
     if (!initialized()) {
-      Log.errorln(F("ERROR: Motor::setSpeed() when not initialized."));
+      Log.traceln(F("ERROR: Motor::setSpeed() when not initialized."));
       return;
     }
 #ifdef SIMULATION
@@ -114,7 +114,7 @@ class Motor : public i2cDevice {
     }
 
     if (!initialized()) {
-      Log.errorln(F("ERROR: Motor::setAcceleration() when not initialized."));
+      Log.traceln(F("ERROR: Motor::setAcceleration() when not initialized."));
       return;
     }
 
@@ -175,7 +175,7 @@ class Motor : public i2cDevice {
    */
   void forward() {
     if (!initialized()) {
-      Log.errorln(F("ERROR: Motor::forward() when not initialized."));
+      Log.traceln(F("ERROR: Motor::forward() when not initialized."));
       return;
     }
     setSpeed(FULL_SPEED);
@@ -192,7 +192,7 @@ class Motor : public i2cDevice {
    */
   void reverse() {
     if (!initialized()) {
-      Log.errorln(F("ERROR: Motor::reverse() when not initialized."));
+      Log.traceln(F("ERROR: Motor::reverse() when not initialized."));
       return;
     }
     setSpeed(FULL_SPEED);
@@ -209,7 +209,7 @@ class Motor : public i2cDevice {
    */
   void stop() {
     if (!initialized()) {
-      Log.errorln(F("ERROR: Motor::stop() when not initialized."));
+      Log.traceln(F("ERROR: Motor::stop() when not initialized."));
       return;
     }
     // DO NOT use MOTOR_STOP to stop Motor. Use setSpeed(0) OR MOTOR WILL STOP IMMEDIATELY
@@ -269,7 +269,7 @@ class Motor : public i2cDevice {
    */
   virtual void probe() override {
     if (!initialized()) {
-      Log.errorln(F("ERROR: Motor::probe() when not initialized."));
+      Log.traceln(F("ERROR: Motor::probe() when not initialized."));
       return;
     }
     status();
