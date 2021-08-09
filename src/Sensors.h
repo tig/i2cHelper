@@ -79,9 +79,10 @@ class QwiicContactSensor : public ContactSensor {
       setContact(_button.isPressed());
       //Log.trace(F("  isContacted = %T, FirmwareVersion = %d, I2Caddress = %X"), _contact, _button.getFirmwareVersion(), _button.getI2Caddress());
       if (!success) {
-        Log.errorln(F("  ERROR: %S setup failed. isConnected = %T, DeviceID() = %X"), name(), _button.isConnected(), _button.deviceID());
+        Log.traceln(F("\n  ERROR: %S setup failed. isConnected = %T, DeviceID() = %X"), name(), _button.isConnected(), _button.deviceID());
+      } else {
+        Log.trace(F(" [%p]"), this);
       }
-      Log.trace(F(" [%p]"), this);
     }
     return success;
   }
@@ -169,7 +170,7 @@ class VL53L1XDistanceSensor : public DistanceSensor {
       uint16_t result;
       if ((result = (uint16_t)_sensor->begin()) != 0)  // Begin returns 0 on a good init
       {
-        Log.errorln(F("\n    ERROR: Distance Sensor failed to begin. Result: %X. Please check wiring."), result);
+        Log.traceln(F("\n    ERROR: Distance Sensor failed to begin. Result: %X. Please check wiring."), result);
         Log.traceln(F("          checkID: %d"), (uint16_t)_sensor->checkID());
         VL53L1X_Version_t ver = _sensor->getSoftwareVersion();
         Log.traceln(F("  softwareVersion: %d.%d.%d.%d"), ver.major, ver.minor, ver.revision, ver.build);
@@ -215,7 +216,7 @@ class VL53L1XDistanceSensor : public DistanceSensor {
   }
 
   virtual void probe() override {
-    if (setPort()) {
+    if (initialized() && setPort()) {
       _sensor->startOneshotRanging();
       for (uint16_t msecs = 0; !_sensor->checkForDataReady() && msecs <= SENSOR_WAIT_PERIOD; msecs++) {
         delay(1);
