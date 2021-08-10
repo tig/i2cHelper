@@ -13,3 +13,4 @@
 [submodule "lib/Multiplex"]
 	path = lib/Multiplex
 	url = tig:tig/Multiplex
+	branch = master
