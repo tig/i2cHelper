@@ -185,9 +185,6 @@ bool Commands::beginServer(const byte *macAddress, const IPAddress &ip, const ch
             // Add this shell to the multiplexer
             //Log.traceln(F("Adding client %d to multiplex"), client);
             _multiplex.add(&_shellClient[client]);
-
-            _multiplex.println("new client");
-
             break;
           } else {
             Log.noticeln(F("  Client connect attempt failed. Shell::begin returned false (out of memory?)."));
