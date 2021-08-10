@@ -168,10 +168,10 @@ ShellCommandRegister* cmdShell = ShellCommandClass(shell, "Configures shell - [t
 ShellCommandRegister* cmdNotify = ShellCommandClass(notify, "Enables state change notifications for this shell - [on*|off]", {
   Cmds.logCommand(command->name, argc, argv);
   if (argc > 1 && !strcmp_P(argv[1], PSTR("on"))) {
-    Cmds._multiplex.enable(shell.stream());
+    Cmds._multiplex.enableStream(shell.stream());
     shell.println(F("notify = on"));
   } else if (argc > 1 && !strcmp_P(argv[1], PSTR("off"))) {
-    Cmds._multiplex.disable(shell.stream());
+    Cmds._multiplex.disableStream(shell.stream());
     shell.println(F("notify = off"));
   }
 });

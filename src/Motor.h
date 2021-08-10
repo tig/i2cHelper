@@ -333,7 +333,7 @@ class Motor : public i2cDevice {
   uint8_t _cachedAccel = ACCEL_RATE;
   uint8_t _cachedTemperature = 0;
   uint8_t _cachedCurrent = 0;
-  bool _stateChanged = false;
+  bool _stateChanged = true;
 };
 
 // https://www.robotshop.com/en/md04-24v-20a-h-bridge-usb-dc-motor-driver.html
