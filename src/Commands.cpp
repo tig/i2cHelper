@@ -49,6 +49,8 @@ bool Commands::begin() {
   _serialShell.setPrompt(shellPrompt);
   _serialShell.begin(Serial, 20, Terminal::Mode::Serial);
 
+  //_multiplex.add(&Serial);
+
   return _isInitialized = success;
 }
 
@@ -155,7 +157,48 @@ bool Commands::beginServer(const byte *macAddress, const IPAddress &ip, const ch
     }
 #endif
 
-    // Handle new/disconnecting clients.
+    // Shutdown any disconnected clients and loop() any still connected
+    for (uint16_t client = 0; client < MAX_CLIENTS; client++) {
+      if (_shellClient[client].connected()) {
+
+        // Perform periodic shell processing on the active client.
+        _telnetShell[client].loop();
+
+      } else if (_shellClient[client].getSocketNumber() != MAX_SOCK_NUM) {
+
+        // The client has been disconnected. Shut down the shell.
+        Log.noticeln(F("Client #%d has disconnected. Socket status is %X"), client, _shellClient[client].status());
+
+        // Multiplex does not directly support a remove API. Only reset().
+        // So whenever a client disconnects we tear the whole thing down and re-add any remaining
+        // clients.
+        //Log.traceln(F("Resetting multiplex"));
+        _multiplex.reset();
+
+        // TODO: if this client was logging, set back to Serial
+        _telnetShell[client].end();
+
+        // Now shut down the client
+        _shellClient[client].stop();
+        Log.noticeln(F("Client #%d has been stopped"), client);
+      } 
+      
+    }
+
+    // re-setup multiplex
+    if (_multiplex.count() == 0) {
+      // Multiplex does not directly support a remove API. Only reset().
+
+      //_multiplex.add(&Serial);
+      for (uint16_t client = 0; client < MAX_CLIENTS; client++) {
+        if (_shellClient[client].connected()) {
+          //Log.traceln(F("Re-adding client %d to multiplex"), client);
+          _multiplex.add(&_shellClient[client]);
+        }
+      }
+    }
+
+    // Add new client, if any
 #ifdef USE_WIFI
     WiFiClient newClient = _shellServer.accept();
 #endif
@@ -196,41 +239,7 @@ bool Commands::beginServer(const byte *macAddress, const IPAddress &ip, const ch
         Log.noticeln(F("  Client connection refused; already %d clients connected."), MAX_CLIENTS);
         newClient.stop();
       }
-    } else {
-      // Shutdown any disconnected clients and loop() the rest
-      for (uint16_t client = 0; client < MAX_CLIENTS; client++) {
-        if (_shellClient[client].connected()) {
-          // Perform periodic shell processing on the active client.
-          _telnetShell[client].loop();
-        } else if (_shellClient[client].getSocketNumber() != MAX_SOCK_NUM) {
-          // The client has been disconnected. Shut down the shell.
-          Log.noticeln(F("Client %d has disconnected. Socket status is %X"), client, _shellClient[client].status());
-
-          // Multiplex does not directly support a remove API. Only reset().
-          // So whenever a client disconnects we tear the whole thing down and re-add any remaining
-          // clients.
-          //Log.traceln(F("Resetting multiplex"));
-          _multiplex.reset();
-
-          // TODO: if this client was logging, set back to Serial
-          _telnetShell[client].end();
-
-          // Now shut down the client
-          _shellClient[client].stop();
-          Log.noticeln(F("Client %d has been stopped"), client);
-        } 
-       
-      }
-      if (_multiplex.count() == 0) {
-        // Multiplex does not directly support a remove API. Only reset().
-        for (uint16_t client = 0; client < MAX_CLIENTS; client++) {
-          if (_shellClient[client].connected()) {
-            //Log.traceln(F("Re-adding client %d to multiplex"), client);
-            _multiplex.add(&_shellClient[client]);
-          }
-        }
-      }
-    }
+    } 
 
     if (Serial.available()) {
       _serialShell.loop();

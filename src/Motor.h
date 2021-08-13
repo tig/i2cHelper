@@ -26,9 +26,6 @@ class Motor : public i2cDevice {
   virtual bool begin() override {
     //Log.traceln(F("Motor::begin()"));
     bool result = i2cDevice::begin();
-    _cachedSpeed = STOP_SPEED;
-    _cachedDirection = MOTOR_STOP;
-    _cachedAccel = ACCEL_RATE;
 
 #ifdef SIMULATION
     pinMode(address(), OUTPUT);
@@ -97,6 +94,7 @@ class Motor : public i2cDevice {
 #ifdef SIMULATION
     digitalWrite(address(), _cachedSpeed > 0 ? HIGH : LOW);
 #endif
+    Log.traceln(F("Motor::setSpeed() - %p"), this);
   }
 
   virtual uint32_t speed() {
@@ -178,7 +176,7 @@ class Motor : public i2cDevice {
       Log.traceln(F("ERROR: Motor::forward() when not initialized."));
       return;
     }
-    setSpeed(FULL_SPEED);
+    setSpeed(Motor::speed());
     setDirection(MOTOR_FORWARD);
     if (_stateChanged) {
       _stateChanged = false;
@@ -195,7 +193,7 @@ class Motor : public i2cDevice {
       Log.traceln(F("ERROR: Motor::reverse() when not initialized."));
       return;
     }
-    setSpeed(FULL_SPEED);
+    setSpeed(Motor::speed());
     setDirection(MOTOR_BACKWARD);
     if (_stateChanged) {
       _stateChanged = false;
@@ -207,13 +205,11 @@ class Motor : public i2cDevice {
    * @brief normal stop of the motor (will continue to decelearate at accelration() rate)
    * 
    */
-  void stop() {
+  virtual void stop() {
     if (!initialized()) {
       Log.traceln(F("ERROR: Motor::stop() when not initialized."));
       return;
     }
-    // DO NOT use MOTOR_STOP to stop Motor. Use setSpeed(0) OR MOTOR WILL STOP IMMEDIATELY
-    setSpeed(STOP_SPEED); 
     if (_stateChanged) {
       _stateChanged = false;
       notify();
@@ -329,7 +325,7 @@ class Motor : public i2cDevice {
  private:
   uint8_t _cachedStatus = 0;
   char _statusString[255] = "\0";
-  uint32_t _cachedSpeed = STOP_SPEED;
+  uint32_t _cachedSpeed = FULL_SPEED;
   uint8_t _cachedAccel = ACCEL_RATE;
   uint8_t _cachedTemperature = 0;
   uint8_t _cachedCurrent = 0;
@@ -381,9 +377,8 @@ class AdafruitMotorController : public Motor {
     }
 
     // Must set speed first when stopping
-    //Log.trace(F("speed -> %d, "), STOP_SPEED);
-    setSpeed(STOP_SPEED);
-    setAcceleration(ACCEL_RATE);
+    setSpeed(Motor::speed());
+    setAcceleration(Motor::acceleration());
     setDirection(MOTOR_STOP);
 
     //Log.trace(F("  Verifying motor ["));
@@ -393,28 +388,6 @@ class AdafruitMotorController : public Motor {
       setInitialized(false);
       return false;
     }
-
-    uint8_t byte;
-    if (!_speedReg->read(&byte)) {
-      Log.errorln(F("\nERROR: AdafruitMotorController failed to read back speed"));
-      setInitialized(false);
-      return false;
-    }
-    assert(byte == STOP_SPEED);
-
-    if (!_accelReg->read(&byte)) {
-      Log.errorln(F("\nERROR: AdafruitMotorController failed to read back acceleration"));
-      setInitialized(false);
-      return false;
-    }
-    assert(byte == ACCEL_RATE);
-
-    if (!_cmdReg->read(&byte)) {
-      Log.errorln(F("\nERROR: AdafruitMotorController failed to read back command/direction"));
-      setInitialized(false);
-      return false;
-    }
-    assert(byte == MOTOR_STOP);
 
     Motor::setStatus(status);
     Log.trace(F(" [%p]"), this);
@@ -498,17 +471,18 @@ class AdafruitMotorController : public Motor {
     // }
 
     Motor::setSpeed(speed);
-    //Log.traceln(F("AdafruitMotorController::setSpeed() - %p"), this);
+    Log.traceln(F("AdafruitMotorController::setSpeed() - %p"), this);
   }
 
   virtual uint32_t speed() override {
-    uint8_t byte;
+    uint8_t byte = 0;
     if (initialized() && !_speedReg->read(&byte)) {
       Log.errorln(F("ERROR: AdafruitMotorController failed to read motor speed"));
     } else {
-      Motor::setSpeed(byte);
+      // DO NOT un-comment this and do not set the base speed; because of stop() we don't care.
+      // Motor::setSpeed(byte);
     }
-    return Motor::speed();
+    return byte;
   }
 
   /**
@@ -563,6 +537,26 @@ class AdafruitMotorController : public Motor {
     // }
 
     return Motor::current();
+  }
+
+  /**
+   * @brief normal stop of the motor (will continue to decelearate at accelration() rate)
+   * 
+   */
+  virtual void stop() {
+    Motor::stop();
+
+    if (!initialized()) return;
+
+    bool success = true;
+
+    // MUST set speed first, then direction
+    // note we don't do MOTOR_STOP; doing so overrides acelleration!
+    success = _speedReg->write(STOP_SPEED, 1);
+    if (!success) {
+      Log.errorln(F("ERROR: AdafruitMotorController::stop() - _speedReg->write(speed) failed"));
+      return;
+    }
   }
 
   // /**

@@ -158,7 +158,7 @@ class VL53L1XDistanceSensor : public DistanceSensor {
   const uint8_t SENSOR_PERIOD = 180;         // How fast to sample - min is 100, but that can result in bad readings some times
   const uint8_t SENSOR_TIMING_BUDGET = 100;  // Predefined values = 15, 20, 33, 50, 100(default), 200, 500.
   const uint16_t SENSOR_WAIT_PERIOD = 1000;  // Num msec to wait until giving up on checkforDataReady
-  const uint8_t SENSOR_MIN_MOVEMENT = 5;     // 5 mm
+  const uint8_t SENSOR_MIN_MOVEMENT = 10;     // 5 mm
 
   using DistanceSensor::DistanceSensor;
 
