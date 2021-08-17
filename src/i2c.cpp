@@ -35,7 +35,17 @@ bool i2cDevice::begin() {
   return _initialized;
 }
 
-void i2cDevice::probe() {
+/**
+   * @brief updates cached members by reading from physical device.
+   * 
+   * @param forceNotify if true stateChange notification callbacks will be called. 
+   * if false, callbacks will only be called if the state has changed since last notify
+   * 
+   */
+void i2cDevice::probe(bool forceNotify) {
+  if (forceNotify || stateChanged()) {
+    notify();
+  }
 }
 
 bool i2cDevice::setPort() {
@@ -109,10 +119,13 @@ i2c Bus = i2c::getInstance();
  * @return true 
  * @return false 
  */
-bool i2c::begin(i2cDevice** devices, size_t num) {
+bool i2c::begin(i2cDevice** devices, size_t num, uint16_t probeInterval) {
   bool success = true;
   _initialized = false;
-  for (size_t i = 0 ; i < num ; i++) {
+  _probeTimer = millis();
+  _probeInterval = probeInterval;
+
+  for (size_t i = 0; i < num; i++) {
     _devices.emplace_back(devices[i]);
   }
 
@@ -176,7 +189,7 @@ i2cDevice* i2c::findDevice(uint8_t address, uint8_t port) {
  * @return true 
  * @return false 
  */
-bool i2c::probeAll(int delayTime) {
+bool i2c::testAll(int delayTime) {
   if (!initialized()) {
     Log.traceln(F("ERROR: i2c::scanI2C when not initialized."));
     return false;
@@ -198,7 +211,7 @@ bool i2c::probeAll(int delayTime) {
       }
     }
 
-    bool found = probeDevice(_devices[i]->address(), _devices[i]->muxPort(), delayTime);
+    bool found = testDevice(_devices[i]->address(), _devices[i]->muxPort(), delayTime);
     _devices[i]->setFound(found);
   }
 
@@ -224,7 +237,7 @@ bool i2c::probeAll(int delayTime) {
  * @return true 
  * @return false 
  */
-bool i2c::probeDevice(uint8_t address, uint8_t port, int delayTime) {
+bool i2c::testDevice(uint8_t address, uint8_t port, int delayTime) {
   byte error;
   bool success = true;
 
@@ -337,7 +350,7 @@ bool i2c::scan(int delayTime) {
   Log.noticeln(F("Scanning for devices not on a mux"));
   for (uint8_t address = 0; address < 127; address++) {
     foundAddr[address] = 0xFF;
-    if (probeDevice(address, 0xFF, delayTime)) {
+    if (testDevice(address, 0xFF, delayTime)) {
       //              Log.notice(F("found!"));
       foundAddr[address] = address;
     }
@@ -351,7 +364,7 @@ bool i2c::scan(int delayTime) {
       for (uint8_t address = 0; address < 127; address++) {
         //if (mux[m].setPort(port)) {
         if (!wasFound(foundAddr, address) && enableMuxPort(mux[m].getAddress(), port)) {
-          if (probeDevice(address, port, delayTime)) {
+          if (testDevice(address, port, delayTime)) {
             //              Log.notice(F("found!"));
           }
           disableMuxPort(mux[m].getAddress(), port);
@@ -361,4 +374,39 @@ bool i2c::scan(int delayTime) {
     }
   }
   return success;
+}
+
+/**
+ * @brief Called every _probeInterval MS. Updates the cached state for each
+ * device from the real world; this, in turn, caused the devices to call 
+ * stateChanged callbacks as-appropriate. 
+  * 
+  * @param forceNotify if true stateChange notification callbacks will be called. 
+  * if false, callbacks will only be called if the state has changed since last notify
+ */
+void i2c::probeDevices(bool forceNotify) {
+  if (initialized() &&  (_probeInterval > 0) && (forceNotify || (millis() - _probeTimer) >= _probeInterval)) {
+    //Log.traceln(F("i2c::probeDevices "));
+    _probeTimer = millis();
+
+    for (uint8_t i = 0; i < _devices.size(); i++) {
+      if (_devices[i]->initialized()) {
+        _devices[i]->probe(forceNotify);
+      }
+    }
+  }
+}
+
+/**
+   * @brief `Printable::printTo` - prints the current motor state (direction & speed)
+   *
+   * @param p
+   * @return size_t
+   */
+size_t i2c::printTo(Print& p) const {
+  int n = 0;
+  for (uint8_t i = 0; i < _devices.size(); i++) { 
+    n += p.println(*_devices[i]);
+  }
+  return n; 
 }

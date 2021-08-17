@@ -263,63 +263,41 @@ ShellCommandRegister* cmdGet = ShellCommandClass(get, "Gets state - [all|i2c|ip|
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("i2c")))) {
     Log.noticeln(F("------------- Verifying All Devices are Working "));
-    Bus.probeAll(10);
+    Bus.testAll(true);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("motor")))) {
-    _motorController->probe();
-    Log.noticeln(F("%p"), *_motorController);
-    Cmds._multiplex.println(*_motorController);
+    _motorController->probe(true);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("fwd")))) {
-    _forwardDistanceSensor->distance();
-    Log.noticeln(F("%p"), *_forwardDistanceSensor);
-    Cmds._multiplex.println(*_forwardDistanceSensor);
+    _forwardDistanceSensor->probe(true);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("rwd")))) {
-    _rearwardDistanceSensor->distance();
-    Log.noticeln(F("%p"), *_rearwardDistanceSensor);
-    Cmds._multiplex.println(*_rearwardDistanceSensor);
+    _rearwardDistanceSensor->probe(true);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("fwdend")))) {
-    _forwardEndRangeSensor->probe();
-    Log.noticeln(F("%p"), *_forwardEndRangeSensor);
-    Cmds._multiplex.println(*_forwardEndRangeSensor);
+    _forwardEndRangeSensor->probe(true);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("rwdend")))) {
-    _rearwardEndRangeSensor->probe();
-    Log.noticeln(F("%p"), *_rearwardEndRangeSensor);
-    Cmds._multiplex.println(*_rearwardEndRangeSensor);
+    _rearwardEndRangeSensor->probe(true);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("opened")))) {
-    _openedSensor->probe();
-    Log.noticeln(F("%p"), *_openedSensor);
-    Cmds._multiplex.println(*_openedSensor);
+    _openedSensor->probe(true);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("closed")))) {
-    _closedSensor->probe();
-    Log.noticeln(F("%p"), *_closedSensor);
-    Cmds._multiplex.println(*_closedSensor);
+    _closedSensor->probe(true);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("relay1")))) {
-    _actuatorRelay1->probe();
-    Log.noticeln(F("%p"), *_actuatorRelay1);
-    Cmds._multiplex.println(*_actuatorRelay1);
+    _actuatorRelay1->probe(true);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("relay2")))) {
-    _actuatorRelay2->probe();
-    Log.noticeln(F("%p"), *_actuatorRelay2);
-    Cmds._multiplex.println(*_actuatorRelay2);
+    _actuatorRelay2->probe(true);
   }
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("resurrect")))) {
-    _resurrectionRelay->probe();
-    Log.noticeln(F("%p"), *_resurrectionRelay);
-    Cmds._multiplex.println(*_resurrectionRelay);
+    _resurrectionRelay->probe(true);
   }
 #if defined(ARDUINO_ARCH_ESP32)
   if (all || (argc > 1 && !strcmp_P(argv[1], PSTR("btn")))) {
-    _esp32Button->probe();
-    Log.noticeln(F("%p"), *_esp32Button);
-    Cmds._multiplex..println(*_esp32Button);
+    _esp32Button->probe(true);
   }
 #endif
 });
@@ -350,8 +328,7 @@ ShellCommandRegister* cmdRelay = ShellCommandClass(relay, "Controls a relay - [1
     }
   }
   if (relay != nullptr) {
-    relay->probe();
-    shell.println(*relay);
+    relay->probe(true);
   }
 });
 
@@ -388,7 +365,7 @@ ShellCommandRegister* cmdMotor = ShellCommandClass(motor, "Controls the motor - 
     Cmds._serialShell.help();
     shell.help();
   }
-  _motorController->probe();
+  _motorController->probe(true);
 });
 
 ShellCommandRegister* cmdLA = ShellCommandClass(la, "Controls linear actuator via relays 1 & 2 - ([extend|retract|off])", {
@@ -412,8 +389,8 @@ ShellCommandRegister* cmdLA = ShellCommandClass(la, "Controls linear actuator vi
     delay(LA_DELAY_AFTER);
     _actuatorRelay2->turnRelayOff();
   }
-  _actuatorRelay1->probe();
-  _actuatorRelay2->probe();
+  // _actuatorRelay1->probe(true);
+  // _actuatorRelay2->probe(true);
 });
 
 void btns() {
@@ -765,17 +742,17 @@ void loop() {
       }
     }
 
-    if (_rearwardEndRangeSensor->initialized() && _rearwardEndRangeSensor->isContacted() &&
-        _motorController->initialized() && _motorController->direction() != Motor::MOTOR_STOP) {
-      Log.errorln(F("loop reardward emergency stop"));
-      _motorController->emergencyStop();
-    }
+    // if (_rearwardEndRangeSensor->initialized() && _rearwardEndRangeSensor->isContacted() &&
+    //     _motorController->initialized() && _motorController->direction() != Motor::MOTOR_STOP) {
+    //   Log.errorln(F("loop reardward emergency stop"));
+    //   _motorController->emergencyStop();
+    // }
 
-    if (_forwardEndRangeSensor->initialized() && _forwardEndRangeSensor->isContacted() &&
-        _motorController->initialized() && _motorController->direction() != Motor::MOTOR_STOP) {
-      Log.errorln(F("loop reardward emergency stop"));
-      _motorController->emergencyStop();
-    }
+    // if (_forwardEndRangeSensor->initialized() && _forwardEndRangeSensor->isContacted() &&
+    //     _motorController->initialized() && _motorController->direction() != Motor::MOTOR_STOP) {
+    //   Log.errorln(F("loop reardward emergency stop"));
+    //   _motorController->emergencyStop();
+    // }
   }
 }
 

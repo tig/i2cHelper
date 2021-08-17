@@ -20,35 +20,40 @@ class ContactSensor : public i2cDevice {
   const int BUTTON_PIN = 0;
 
   virtual bool begin() override {
-    if (address() == 0xFF) {
-      pinMode(BUTTON_PIN, INPUT_PULLUP);
-      bool b = digitalRead(BUTTON_PIN) == LOW;
-      setContact(b);
+    // Call base which sets up mux if needed
+    bool success = i2cDevice::begin();
+    if (success) {
+      if (address() == 0xFF) {
+        pinMode(BUTTON_PIN, INPUT_PULLUP);
+        bool b = digitalRead(BUTTON_PIN) == LOW;
+        setContact(b);
+      }
     }
-    return i2cDevice::begin();
+    return success;
+  }
+
+  virtual void probe(bool forceNotify) override {
+    if (setPort()) {
+      if (address() == 0xFF) {
+        bool b = digitalRead(BUTTON_PIN) == LOW;
+        setContact(b);
+      }
+    }
+    i2cDevice::probe(forceNotify);
   }
 
   virtual bool isContacted() {
-    setPort();
-    //Log.traceln(F("ContactSensor::isContacted = %T"), _contact);
-
-    if (address() == 0xFF) {
-      bool b = digitalRead(BUTTON_PIN) == LOW;
-      setContact(b);
-    }
     return _contact;
   }
 
-  virtual void probe() override {
-    if (address() == 0xFF) {
-      isContacted();
-    }
-  }
-
   virtual void setContact(bool contact) {
-    setPort();
-    if (_contact != contact) {
-      _contact = contact;
+    if (setPort()) {
+      if (_contact != contact) {
+        _contact = contact;
+        setStateChanged();
+      }
+    }
+    if (stateChanged()) {
       notify();
     }
   }
@@ -72,40 +77,25 @@ class QwiicContactSensor : public ContactSensor {
 
   virtual bool begin() override {
     // Call base which sets up mux if needed
-    bool success = i2cDevice::begin();
+    bool success = ContactSensor::begin();
     if (success) {
       success = _button.begin(address());
-
-      setContact(_button.isPressed());
       //Log.trace(F("  isContacted = %T, FirmwareVersion = %d, I2Caddress = %X"), _contact, _button.getFirmwareVersion(), _button.getI2Caddress());
       if (!success) {
         Log.traceln(F("\n  ERROR: %S setup failed. isConnected = %T, DeviceID() = %X"), name(), _button.isConnected(), _button.deviceID());
       } else {
+        setContact(_button.isPressed());
         Log.trace(F(" [%p]"), this);
       }
     }
     return success;
   }
 
-  virtual void probe() override {
-    isContacted();
-  }
-
-  virtual bool isContacted() override {
-    if (!initialized()) {
-      Log.traceln(F("ERROR: QwiicContactSensor::isContacted() when not initialized."));
-      return false;
+  virtual void probe(bool forceNotify) override {
+    if (setPort()) {
+      ContactSensor::setContact(_button.isPressed());
     }
-    // Call base to setPort
-    bool contact = ContactSensor::isContacted();
-    contact = _button.isPressed();
-    ContactSensor::setContact(contact);
-    return contact;
-  }
-
-  void setContact(bool contact) override {
-    ContactSensor::setContact(contact);
-    digitalWrite(address(), contact);
+    ContactSensor::probe(forceNotify);
   }
 
  private:
@@ -127,6 +117,9 @@ class DistanceSensor : public i2cDevice {
   virtual void setDistance(uint16_t distance) {
     if (_cachedDistance != distance) {
       _cachedDistance = distance;
+      setStateChanged();
+    }
+    if (stateChanged()) {
       notify();
     }
   }
@@ -155,10 +148,10 @@ class DistanceSensor : public i2cDevice {
  */
 class VL53L1XDistanceSensor : public DistanceSensor {
  public:
-  const uint8_t SENSOR_PERIOD = 180;         // How fast to sample - min is 100, but that can result in bad readings some times
-  const uint8_t SENSOR_TIMING_BUDGET = 100;  // Predefined values = 15, 20, 33, 50, 100(default), 200, 500.
-  const uint16_t SENSOR_WAIT_PERIOD = 1000;  // Num msec to wait until giving up on checkforDataReady
-  const uint8_t SENSOR_MIN_MOVEMENT = 10;     // 5 mm
+  static const uint8_t SENSOR_PERIOD = 180;           // How fast to sample - min is 100, but that can result in bad readings some times
+  static const uint8_t SENSOR_TIMING_BUDGET = 100;    // Predefined values = 15, 20, 33, 50, 100(default), 200, 500.
+  static const uint16_t SENSOR_WAIT_PERIOD = 1000;    // Num msec to wait until giving up on checkforDataReady
+  static const uint8_t SENSOR_DELTA_FOR_NOTIFY = 10;  // 10 mm
 
   using DistanceSensor::DistanceSensor;
 
@@ -181,12 +174,9 @@ class VL53L1XDistanceSensor : public DistanceSensor {
         Log.traceln(F("       I2CAddress: %X"), (uint16_t)_sensor->getI2CAddress());
         Log.traceln(F("      getSensorID: %X"), (uint16_t)_sensor->getSensorID());
         setInitialized(false);
+        return false;
       }
-    } else {
-      Log.errorln(F("    ERROR: i2cDevice::begin() failed"));
-    }
 
-    if (initialized() == true) {
       // Everything should be working. Set initial parameters and get
       // current distance.
       _sensor->setIntermeasurementPeriod(SENSOR_PERIOD);
@@ -203,10 +193,14 @@ class VL53L1XDistanceSensor : public DistanceSensor {
           break;
         }
       }
+    } else {
+      Log.errorln(F("    ERROR: i2cDevice::begin() failed"));
+    }
+
+    if (initialized()) {
       setDistance(_sensor->getDistance());
       Log.trace(F(" [%p]"), this);
     }
-
     return initialized();
   };
 
@@ -214,13 +208,13 @@ class VL53L1XDistanceSensor : public DistanceSensor {
     uint16_t delta = 0;
     if (DistanceSensor::distance() > distance) delta = DistanceSensor::distance() - distance;
     if (DistanceSensor::distance() < distance) delta = distance - DistanceSensor::distance();
-    if (delta > SENSOR_MIN_MOVEMENT) {
+    if (delta > _minMovement) {
       DistanceSensor::setDistance(distance);
     }
   }
 
-  virtual void probe() override {
-    if (initialized() && setPort()) {
+  virtual void probe(bool forceNotify) override {
+    if (setPort()) {
       _sensor->startOneshotRanging();
       for (uint16_t msecs = 0; !_sensor->checkForDataReady() && msecs <= SENSOR_WAIT_PERIOD; msecs++) {
         delay(1);
@@ -231,10 +225,15 @@ class VL53L1XDistanceSensor : public DistanceSensor {
       }
       setDistance(_sensor->getDistance());
     }
+    DistanceSensor::probe(forceNotify);
   }
 
   SFEVL53L1X* sensor() const { return _sensor; }
 
+  uint16_t minMovement() { return _minMovement; }
+  void setMinMovement(uint16_t mm) { _minMovement = mm; }
+
  private:
   SFEVL53L1X* _sensor = nullptr;
+  uint16_t _minMovement = SENSOR_DELTA_FOR_NOTIFY;
 };

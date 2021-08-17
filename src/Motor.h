@@ -44,7 +44,7 @@ class Motor : public i2cDevice {
     _statusString[0] = '\0';
     if (_cachedStatus != status) {
       _cachedStatus = status;
-      _stateChanged = true;
+      setStateChanged();
     }
   }
 
@@ -84,7 +84,7 @@ class Motor : public i2cDevice {
   virtual void setSpeed(uint8_t speed) {
     if (_cachedSpeed != speed) {
       _cachedSpeed = speed;
-      _stateChanged = true;
+      setStateChanged();
     }
 
     if (!initialized()) {
@@ -94,7 +94,7 @@ class Motor : public i2cDevice {
 #ifdef SIMULATION
     digitalWrite(address(), _cachedSpeed > 0 ? HIGH : LOW);
 #endif
-    Log.traceln(F("Motor::setSpeed() - %p"), this);
+    //Log.traceln(F("Motor::setSpeed() - %p"), this);
   }
 
   virtual uint32_t speed() {
@@ -108,7 +108,7 @@ class Motor : public i2cDevice {
   virtual void setAcceleration(uint8_t acceleration) {
     if (_cachedAccel != acceleration) {
       _cachedAccel = acceleration;
-      _stateChanged = true;
+      setStateChanged();
     }
 
     if (!initialized()) {
@@ -133,7 +133,7 @@ class Motor : public i2cDevice {
   void setTemperature(uint32_t temp) {
     if (_cachedTemperature != temp) {
       _cachedTemperature = temp;
-      //_stateChanged = true;
+      //setStateChanged();
     }
   }
 
@@ -145,7 +145,7 @@ class Motor : public i2cDevice {
   void setCurrent(uint32_t current) {
     if (_cachedCurrent != current) {
       _cachedCurrent = current;
-      //_stateChanged = true;
+      //setStateChanged();
     }
   }
 
@@ -154,15 +154,15 @@ class Motor : public i2cDevice {
    * 
    */
   virtual void emergencyStop() {
-    Log.errorln(F("ERROR: Emergency stop of motor requested."));
+    Log.errorln(F("\nERROR: Emergency stop of motor requested."));
     setDirection(MOTOR_STOP);
-    Log.errorln(F("       Motor stopped. Must be re-initialized."));
-    setInitialized(false);
+    stop();
+    // Log.errorln(F("       Motor stopped. Must be re-initialized."));
+    // setInitialized(false);
 #ifdef SIMULATION
     digitalWrite(address(), LOW);
 #endif
-    if (_stateChanged) {
-      _stateChanged = false;
+    if (stateChanged()) {
       notify();
     }
   }
@@ -172,14 +172,14 @@ class Motor : public i2cDevice {
    * 
    */
   void forward() {
+    //Log.traceln(F("%S::forward() "), name());
     if (!initialized()) {
-      Log.traceln(F("ERROR: Motor::forward() when not initialized."));
+      Log.errorln(F("ERROR: Motor::forward() when not initialized."));
       return;
     }
     setSpeed(Motor::speed());
     setDirection(MOTOR_FORWARD);
-    if (_stateChanged) {
-      _stateChanged = false;
+    if (stateChanged()) {
       notify();
     }
   }
@@ -189,14 +189,14 @@ class Motor : public i2cDevice {
    * 
    */
   void reverse() {
+    //Log.traceln(F("%S::reverse() "), name());
     if (!initialized()) {
-      Log.traceln(F("ERROR: Motor::reverse() when not initialized."));
+      Log.errorln(F("ERROR: Motor::reverse() when not initialized."));
       return;
     }
     setSpeed(Motor::speed());
     setDirection(MOTOR_BACKWARD);
-    if (_stateChanged) {
-      _stateChanged = false;
+    if (stateChanged()) {
       notify();
     }
   }
@@ -206,12 +206,13 @@ class Motor : public i2cDevice {
    * 
    */
   virtual void stop() {
+    //Log.traceln(F("%S::stop() "), name());
     if (!initialized()) {
-      Log.traceln(F("ERROR: Motor::stop() when not initialized."));
+      Log.errorln(F("ERROR: Motor::stop() when not initialized."));
       return;
     }
-    if (_stateChanged) {
-      _stateChanged = false;
+    setSpeed(STOP_SPEED);
+    if (stateChanged()) {
       notify();
     }
   }
@@ -233,7 +234,7 @@ class Motor : public i2cDevice {
   virtual void setDirection(uint8_t dir) {
     if (_cachedDirection != dir) {
       _cachedDirection = dir;
-      _stateChanged = true;
+      setStateChanged();
     }
   }
 
@@ -256,29 +257,6 @@ class Motor : public i2cDevice {
         break;
     }
     return (__FlashStringHelper *)PSTR("n/a");
-  }
-
-  /**
-   * @brief Asks device for speed & direction and updates
-   * cached members.
-   * 
-   */
-  virtual void probe() override {
-    if (!initialized()) {
-      Log.traceln(F("ERROR: Motor::probe() when not initialized."));
-      return;
-    }
-    status();
-    speed();
-    acceleration();
-    direction();
-    temperature();
-    current();
-    i2cDevice::address();
-    if (_stateChanged) {
-      _stateChanged = false;
-      notify();
-    }
   }
 
   /**
@@ -315,7 +293,7 @@ class Motor : public i2cDevice {
    * @brief MD04 motor controller speed register (SPEEDREG) settings
    * 
    */
-  static const uint8_t ACCEL_RATE = 25;  // 0 is 0.187s, 255 is just under 8 seconds
+  static const uint8_t ACCEL_RATE = 25;   // 0 is 0.187s, 255 is just under 8 seconds
   static const uint8_t FULL_SPEED = 255;  // Maximum speed
   static const uint8_t STOP_SPEED = 0;    // speed when stopped
 
@@ -329,7 +307,6 @@ class Motor : public i2cDevice {
   uint8_t _cachedAccel = ACCEL_RATE;
   uint8_t _cachedTemperature = 0;
   uint8_t _cachedCurrent = 0;
-  bool _stateChanged = true;
 };
 
 // https://www.robotshop.com/en/md04-24v-20a-h-bridge-usb-dc-motor-driver.html
@@ -394,37 +371,79 @@ class AdafruitMotorController : public Motor {
     return success;
   }
 
-  virtual uint32_t status() {
-    //Log.errorln(F("AdafruitMotorController::status()"));
-    uint8_t byte;
-    if (initialized() && !_statusReg->read(&byte)) {
-      Log.errorln(F("ERROR: AdafruitMotorController::status() failed to read motor status"));
-      //emergencyStop();
-      return 0xFF;
+  /**
+   * @brief updates cached members by reading from physical device.
+   * 
+   * @param forceNotify if true stateChange notification callbacks will be called. 
+   * if false, callbacks will only be called if the state has changed since last notify
+   * 
+   */
+  virtual void probe(bool forceNotify) override {
+    if (!initialized()) {
+      Log.traceln(F("ERROR: Motor::probe() when not initialized."));
+      return;
     }
 
-    // if (byte & 3) {
-    //   Log.errorln(F("ERROR: AdafruitMotorController::status() is over temperature."));
-    //   emergencyStop();
-    // }
+    uint8_t byte = 0;
 
-    Motor::setStatus(byte);
-    return Motor::status();
-  }
+    // ----------- status
+    if (!_statusReg->read(&byte)) {
+      Log.errorln(F("ERROR: AdafruitMotorController::status() failed to read motor status"));
+      //emergencyStop();
+      return;
+    } else {
+      // if (byte & 3) {
+      //   Log.errorln(F("ERROR: AdafruitMotorController::status() is over temperature."));
+      //   emergencyStop();
+      // }
+      Motor::setStatus(byte);
+    }
 
-  /**
-   * @brief Get the direction the motor is set to
-   * 
-   * @return uint8_t 
-   */
-   virtual uint8_t direction() override {
-    uint8_t byte;
-    if (initialized() && !_cmdReg->read(&byte)) {
+    // ----------- speed
+    if (!_speedReg->read(&byte)) {
+      Log.errorln(F("ERROR: AdafruitMotorController failed to read motor speed"));
+      return;
+    } else {
+      // DO NOT un-comment this and do not set the base speed; because of stop() we don't care.
+      // Motor::setSpeed(byte);
+    }
+
+    // ----------- acceleration
+    if (!_accelReg->read(&byte)) {
+      Log.errorln(F("ERROR: AdafruitMotorController Failed to read motor acceleration"));
+      return;
+    } else {
+      Motor::setAcceleration(byte);
+    }
+
+    // ----------- direction
+    if (!_cmdReg->read(&byte)) {
       Log.errorln(F("ERROR: AdafruitMotorController failed to read motor dirction"));
+      return;
     } else {
       Motor::setDirection(byte);
     }
-    return Motor::direction();
+
+    // ----------- temperature
+    if (!_tempReg->read(&byte)) {
+      Log.errorln(F("ERROR: AdafruitMotorController Failed to read motor temperature"));
+      return;
+    } else {
+      Motor::setTemperature(byte);
+    }
+
+    // ----------- current
+    if (!_currentReg->read(&byte)) {
+      Log.errorln(F("ERROR: AdafruitMotorController Failed to read motor current"));
+      return;
+    } else {
+      Motor::setCurrent(byte);
+      // if (Motor::current() > 100) {
+      //   Log.errorln(F("ERROR: AdafruitMotorController::current() - Current is over 100A - EMERGENCY STOP"));
+      //   emergencyStop();
+      // }
+    }
+    Motor::probe(forceNotify);
   }
 
   /**
@@ -434,55 +453,30 @@ class AdafruitMotorController : public Motor {
    */
   virtual void setDirection(uint8_t dir) override {
     if (!initialized()) return;
-    bool success = true;
-
-    success = _cmdReg->write(dir, 1);
-    if (!success) {
-      Log.errorln(F("ERROR: AdafruitMotorController::setDirection() -_cmdReg->write(dir) failed"));
-      return;
+    if (!_cmdReg->write(dir, 1)) {
+      Log.errorln(F("ERROR: AdafruitMotorController::setDirection() - write() failed"));
+    } else {
+      Motor::setDirection(dir);
     }
-    Motor::setDirection(dir);
   }
 
   /**
-   * @brief Set the speed of the motor. 
-   * Note that if the speed is set to 0, the motor WILL NOT STOP immediately.
-   * Instead it will start decellerating according to accel lReg.
+   * @brief Set the speed the motor will run at. 
    * 
    * @param speed 
    */
   virtual void setSpeed(uint8_t speed) override {
     if (!initialized()) return;
 
-    bool success = true;
-
     // MUST set speed first, then direction
-    // note we don't do MOTOR_STOP; doing so overrides acelleration!
-    success = _speedReg->write(speed, 1);
-    if (!success) {
-      Log.errorln(F("ERROR: AdafruitMotorController::setSpeed() - _speedReg->write(speed) failed"));
-      return;
-    }
-
-    // success = _cmdReg->write(Motor::direction(), 1);
-    // if (!success) {
-    //   Log.errorln(F("ERROR: AdafruitMotorController::setSpeed() - _cmdReg->write(Motor::direction() failed"));
-    //   return;
-    // }
-
+    if (!_speedReg->write(speed, 1)) {
+      Log.errorln(F("ERROR: AdafruitMotorController::setSpeed() - write() failed"));
+      speed = 0;
+      if (!_speedReg->read(&speed)) {
+        Log.errorln(F("ERROR: AdafruitMotorController::setSpeed() failed to read back speed"));
+      } 
+    } 
     Motor::setSpeed(speed);
-    Log.traceln(F("AdafruitMotorController::setSpeed() - %p"), this);
-  }
-
-  virtual uint32_t speed() override {
-    uint8_t byte = 0;
-    if (initialized() && !_speedReg->read(&byte)) {
-      Log.errorln(F("ERROR: AdafruitMotorController failed to read motor speed"));
-    } else {
-      // DO NOT un-comment this and do not set the base speed; because of stop() we don't care.
-      // Motor::setSpeed(byte);
-    }
-    return byte;
   }
 
   /**
@@ -498,82 +492,12 @@ class AdafruitMotorController : public Motor {
   virtual void setAcceleration(uint8_t acceleration) override {
     if (!initialized()) return;
     // MUST set acceleration first, then direction
-    if (_accelReg->write(acceleration, 1)) {
+    if (!_accelReg->write(acceleration, 1)) {
+      Log.errorln(F("ERROR: AdafruitMotorController::setAcceleration() - write() failed"));
+    } else {
       Motor::setAcceleration(acceleration);
     }
   }
-
-  virtual uint32_t acceleration() override {
-    uint8_t byte;
-    if (initialized() && !_accelReg->read(&byte)) {
-      Log.errorln(F("ERROR: AdafruitMotorController Failed to read motor acceleration"));
-    } else {
-      Motor::setAcceleration(byte);
-    }
-    return Motor::acceleration();
-  }
-
-  virtual uint32_t temperature() override {
-    uint8_t byte;
-    if (initialized() && !_tempReg->read(&byte)) {
-      Log.errorln(F("ERROR: AdafruitMotorController Failed to read motor temperature"));
-    } else {
-      Motor::setTemperature(byte);
-    }
-    return Motor::temperature();
-  }
-
-  virtual uint32_t current() override {
-    uint8_t byte;
-    if (initialized() && !_currentReg->read(&byte)) {
-      Log.errorln(F("ERROR: AdafruitMotorController Failed to read motor current"));
-    } else {
-      Motor::setCurrent(byte);
-    }
-
-    // if (Motor::current() > 100) {
-    //   Log.errorln(F("ERROR: AdafruitMotorController::current() - Current is over 100A - EMERGENCY STOP"));
-    //   emergencyStop();
-    // }
-
-    return Motor::current();
-  }
-
-  /**
-   * @brief normal stop of the motor (will continue to decelearate at accelration() rate)
-   * 
-   */
-  virtual void stop() {
-    Motor::stop();
-
-    if (!initialized()) return;
-
-    bool success = true;
-
-    // MUST set speed first, then direction
-    // note we don't do MOTOR_STOP; doing so overrides acelleration!
-    success = _speedReg->write(STOP_SPEED, 1);
-    if (!success) {
-      Log.errorln(F("ERROR: AdafruitMotorController::stop() - _speedReg->write(speed) failed"));
-      return;
-    }
-  }
-
-  // /**
-  //  * @brief Causes the motor to stop immediately. Do not do this regularly; use setSpeed instead
-  //  * 
-  //  */
-  // virtual void emergencyStop() override {
-  //   if (!initialized()) return;
-
-  //   if (!_cmdReg->write(MOTOR_STOP, 1)) {
-  //     Log.errorln(F("ERROR: AdafruitMotorController::emergencyStop failed"));
-  //   }
-
-  //   stop();
-  //   Motor::emergencyStop();
-  //   Log.traceln(F("AdafruitMotorController::emergencyStop() - %p"), this);
-  // }
 
  private:
   Adafruit_I2CDevice *_motorController = nullptr;

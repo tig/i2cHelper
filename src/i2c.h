@@ -12,12 +12,6 @@ using namespace std;
 
 class i2cDevice;
 
-class EventHandler {
-    public:
-        void addHandler(std::function<void(int)> callback) {
-        }
-};
-
 /**
  * @brief defines each i2c device. Create an array of these and
  * pass to `begin()`.
@@ -32,7 +26,8 @@ class i2cDevice : public Printable {
         _name(name),
         _isMux(isMux),
         _mux(nullptr),
-        _initialized(false) {
+        _initialized(false),
+        _stateChanged(true) {
           if (isMux || muxAddress != 0xFF) {
             _mux = new QWIICMUX();
           }
@@ -45,7 +40,16 @@ class i2cDevice : public Printable {
    * @return false 
    */
   virtual bool begin();
-  virtual void probe();
+
+  /**
+   * @brief updates cached members by reading from physical device.
+   * 
+   * @param forceNotify if true stateChange notification callbacks will be called. 
+   * if false, callbacks will only be called if the state has changed since last notify
+   * 
+   */
+  virtual void probe(bool forceNotify = false);
+
   virtual bool setPort();
 
   uint8_t address() const;
@@ -59,24 +63,51 @@ class i2cDevice : public Printable {
   void setFound(bool found);
   bool initialized();
   void setInitialized(bool init);
+  void setStateChanged() { _stateChanged = true; }
+  bool stateChanged() { return _stateChanged; }
   virtual size_t printTo(Print& p) const;
 
-  template<class T> void registerStateChange(T* const object, void(T::* const func)(i2cDevice* device))
+  // template<class T> void registerStateChange(T* const object, void(T::* const func)(i2cDevice* device))
+  // {
+  //   using namespace std::placeholders; 
+  //   _callbacks.emplace_back(std::bind(func, object, _1));
+  // }
+
+  // void registerStateChange(void(* const func)(i2cDevice* device)) 
+  // {
+  //   _callbacks.emplace_back(func);
+  // }
+
+  // void notify() 
+  // {
+  //   _stateChanged = false;
+  //   for (const auto& cb : _callbacks)
+  //     cb(this);
+  // }
+
+
+  template<class T> void registerStateChange(T* const object, std::function<void(i2cDevice* device)> func)
   {
     using namespace std::placeholders; 
     _callbacks.emplace_back(std::bind(func, object, _1));
   }
 
-  void registerStateChange(void(* const func)(i2cDevice* device)) 
+  void registerStateChange(std::function<void(i2cDevice* device)> func) 
   {
     _callbacks.emplace_back(func);
   }
 
   void notify() 
   {
-    for (const auto& cb : _callbacks)
+    _stateChanged = false;
+    for (const auto& cb : _callbacks) {
+      //Log.traceln(F("-%S- callback"), name());
       cb(this);
+    }      
   }
+
+ private:
+  std::vector<std::function<void(i2cDevice* device)>> _callbacks;
 
  private:
   uint8_t _address;
@@ -86,11 +117,11 @@ class i2cDevice : public Printable {
   bool _isMux;
   QWIICMUX* _mux;
   bool _found;
-  std::vector<std::function<void(i2cDevice* device)>> _callbacks;
   bool _initialized;
+  bool _stateChanged = true;
 };
 
-class i2c {
+class i2c : public Printable {
  public:
   std::vector<i2cDevice*> _devices;
 
@@ -99,10 +130,11 @@ class i2c {
    * 
    * @param devices array of device specs
    * @param num number of elements in devices
+   * @param probeInterval number of milliseconds between each device probe; 0 to probe on every call to proveDevices
    * @return true 
    * @return false 
    */
-  bool begin(i2cDevice** devices, size_t num);
+  bool begin(i2cDevice** devices, size_t num, uint16_t probeInterval = 0);
 
   void add(i2cDevice* device);
 
@@ -121,15 +153,23 @@ class i2c {
    */
   i2cDevice* findDevice(uint8_t address, uint8_t port);
 
-  bool probeDevice(uint8_t address, uint8_t port, int delayTime);
-
-  bool probeAll(int delayTime);
+  bool testDevice(uint8_t address, uint8_t port, int delayTime);
+  bool testAll(int delayTime);
   bool scan(int delayTime);
 
   bool initialized() { return _initialized; }
+  void probeDevices(bool forceNotify = false);
+  virtual size_t printTo(Print& p) const;
+
+  unsigned long probeInterval() { return _probeInterval; }
+  void setProbeInterval(unsigned long interval) { _probeInterval = interval; }
 
  private:
+
+
   bool _initialized;
+  unsigned long _probeTimer;
+  unsigned long _probeInterval;
 
   // =======================================================
   // Singleton support
@@ -147,7 +187,7 @@ class i2c {
 
  private:
   // Prohibiting External Constructions
-  i2c() : _devices(), _initialized(false){};
+  i2c() : _devices(), _initialized(false), _probeTimer(0), _probeInterval(0) {};
 
   // C++ 11
   // =======

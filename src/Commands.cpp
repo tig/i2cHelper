@@ -135,7 +135,7 @@ bool Commands::beginServer(const byte *macAddress, const IPAddress &ip, const ch
 #ifdef USE_ETHERNET
     if (Ethernet.linkStatus() == LinkON && _netWasConnected == false) {
       Log.noticeln(F("Ethernet cable detected"));
-      delay(2000);
+      delay(500);
       beginServer(_macaddress, _ip);
     } else if (Ethernet.linkStatus() == LinkOFF && _netWasConnected == true) {
       Log.errorln(F("ERROR: Ethernet cable has been unplugged"));
@@ -144,7 +144,7 @@ bool Commands::beginServer(const byte *macAddress, const IPAddress &ip, const ch
 
     if (Ethernet.linkStatus() == LinkON) {
       // Maintain the DHCP lease over time.
-      //Ethernet.maintain();
+      Ethernet.maintain();
     }
 #endif
 
@@ -206,6 +206,7 @@ bool Commands::beginServer(const byte *macAddress, const IPAddress &ip, const ch
     EthernetClient newClient = _shellServer.accept();
 #endif
     if (newClient.connected()) {
+      //Log.traceln(F("newClient.connected()..."));
       uint16_t client;
       for (client = 0; client < MAX_CLIENTS; client++) {
         if (!_shellClient[client].connected()) {

@@ -14,44 +14,46 @@ class Relay : public i2cDevice {
   using i2cDevice::i2cDevice;
 
   virtual void turnRelayOn() {
-    _state = 1;
+    setState(1);
 #ifndef SIMULATION
     digitalWrite(address(), _state);
 #endif
-    notify();
+    if (stateChanged()) {
+      notify();
+    }
   };
 
   virtual void turnRelayOff() {
-    _state = 0;
+    setState(0);
 #ifndef SIMULATION
     digitalWrite(address(), _state);
 #endif
-    notify();
+    if (stateChanged()) {
+      notify();
+    }
   };
 
   virtual void toggleRelay() {
-    _state = _state ? 0 : 1;
+    setState(state() ? 0 : 1);
 #ifndef SIMULATION
     digitalWrite(address(), _state);
 #endif
-    notify();
+    if (stateChanged()) {
+      notify();
+    }
   };
 
   virtual void setState(uint8_t state) {
     //Log.traceln(F("Relay::state() setting to %d"), state);
     if (_state != state) {
       _state = state;
-      notify();
+      setStateChanged();
     }
   };
 
   virtual uint8_t state() {
     return _state;
   };
-
-  virtual void probe() {
-    state();
-  }
 
   virtual size_t printTo(Print& p) const override {
     int n = i2cDevice::printTo(p);
@@ -87,36 +89,34 @@ class QwiicRelay : public Relay {
       }
     }
     return success;
-  };
+  }
 
   virtual void turnRelayOn() override {
     _relay->turnRelayOn();
     ::delay(delay());
-  };
+    Relay::turnRelayOn();
+  }
 
   virtual void turnRelayOff() override {
     _relay->turnRelayOff();
     ::delay(delay());
-  };
+    Relay::turnRelayOff();
+  }
 
   virtual void toggleRelay() override {
     _relay->toggleRelay();
     ::delay(delay());
-  };
+    Relay::toggleRelay();
+  }
 
-  virtual uint8_t state() override {
-    if (!initialized()) {
-      Log.traceln(F("ERROR: Motor::state() when not initialized."));
-      return 0;
-    }    
-    uint8_t result = _relay->getState();
-    //Log.traceln(F("QwiicRelay::state() relay says %d"), result);
-    Relay::setState(result);
-    return result;
-  };
+  virtual void probe(bool forceNotify) override {
+    if (setPort()) {
+      uint8_t result = _relay->getState();
+      //Log.traceln(F("QwiicRelay::probe() getState() says %d"), result);
+      Relay::setState(result);
 
-  virtual void probe() override {
-    state();
+      Relay::probe(forceNotify);
+    }
   }
 
   bool delay() { return _delay; }
