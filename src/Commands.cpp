@@ -26,11 +26,11 @@ int _freeMemory() {
 }
 
 void Commands::logCommand(const __FlashStringHelper *name, int argc, const ShellArguments &argv) {
-  Log.trace(F(">>>>> Command: %S"), name);
+  Log.trace(F("\n>>> Command: %S"), name);
   for (int i = 1; i <= argc; i++) {
     Log.trace(F(" %s"), argv[i]);
   }
-  Log.traceln(" <<<<<");
+  Log.traceln(" >>>");
 }
 
 // Defines functions to be exposed to the rest API
