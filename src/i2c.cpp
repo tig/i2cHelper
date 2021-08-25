@@ -386,7 +386,7 @@ bool i2c::scan(int delayTime) {
  */
 void i2c::probeDevices(bool forceNotify) {
   if (initialized() &&  (_probeInterval > 0) && (forceNotify || (millis() - _probeTimer) >= _probeInterval)) {
-    //Log.traceln(F("i2c::probeDevices "));
+    //Log.traceln(F("i2c::probeDevices"));
     _probeTimer = millis();
 
     for (uint8_t i = 0; i < _devices.size(); i++) {
@@ -394,6 +394,7 @@ void i2c::probeDevices(bool forceNotify) {
         _devices[i]->probe(forceNotify);
       }
     }
+    // Log.traceln(F("i2c:probeDevices took %dms"), millis() - _probeTimer); // nominally ~200ms
   }
 }
 

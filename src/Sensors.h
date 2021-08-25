@@ -208,7 +208,7 @@ class VL53L1XDistanceSensor : public DistanceSensor {
     uint16_t delta = 0;
     if (DistanceSensor::distance() > distance) delta = DistanceSensor::distance() - distance;
     if (DistanceSensor::distance() < distance) delta = distance - DistanceSensor::distance();
-    if (delta > _minMovement) {
+    if (delta > minMovement()) {
       DistanceSensor::setDistance(distance);
     }
   }
